@@ -1,0 +1,13 @@
+{
+  "mode": "fallback",
+  "rate": {
+    "pufEthPerEth": "0.929643704868237957",
+    "ethPerPufEth": "1.075680924598670751",
+    "totalAssets": "27698.958902170120669135",
+    "totalSupply": "25750.162774806492113902"
+  },
+  "protocol": {
+    "tvl_puffer_staking": "60045773.66115422",
+    "apy": "2.671380522100821"
+  }
+}

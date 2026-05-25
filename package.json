@@ -1,0 +1,34 @@
+{
+  "name": "@repo/root",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @repo/web dev",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify": "pnpm check && pnpm test && pnpm typecheck && pnpm build",
+    "ci:verify": "pnpm verify",
+    "clean": "pnpm -r --if-present clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:lint",
+    "typescript": "catalog:build"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "msw"
+    ]
+  }
+}

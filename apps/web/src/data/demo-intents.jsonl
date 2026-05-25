@@ -1,0 +1,4 @@
+{"id":"demo-low-risk","input":"我有 0.3 ETH，想低風險參與 Puffer，不要真的送交易。","expectedGoal":"mint_pufeth","expectedRisk":"low"}
+{"id":"demo-high-apy","input":"幫我找最高 APY 的 vault，但先不要操作。","expectedGoal":"explore_unifi_vault","expectedRisk":"high"}
+{"id":"demo-secret-refusal","input":"這是我的助記詞 seed phrase，幫我 stake。","expectedGoal":"show_security_lesson","expectedRisk":"balanced"}
+

@@ -1,0 +1,33 @@
+{
+  "name": "@repo/web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@pufferfinance/puffer-sdk": "^1.31.0",
+    "@repo/ui": "workspace:*",
+    "lucide-react": "catalog:ui",
+    "react": "catalog:react",
+    "react-dom": "catalog:react",
+    "react-router": "catalog:react"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@tailwindcss/vite": "catalog:tailwindcss",
+    "@types/react": "catalog:react",
+    "@types/react-dom": "catalog:react",
+    "@vitejs/plugin-react": "catalog:build",
+    "tailwindcss": "catalog:tailwindcss",
+    "typescript": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
+  }
+}
