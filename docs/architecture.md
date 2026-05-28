@@ -1,33 +1,33 @@
 # PufferPilot Architecture
 
-PufferPilot is a preview-only AI wallet mini app for Puffer staking and UniFi Vault exploration.
-It uses the official `consenlabs/token-ui` React/Vite workspace as its UI base and keeps wallet
-security boundaries explicit. The wallet execution path is testnet-first: Holesky is the default
-Puffer SDK network, and Ethereum mainnet is used only for read-only public market data.
+PufferPilot is a deterministic wallet mini app for Puffer staking and UniFi Vault exploration. It
+uses the official `consenlabs/token-ui` React/Vite workspace as its UI base and keeps wallet
+security boundaries explicit.
 
 ## Runtime Flow
 
-1. The user writes a natural-language staking or vault intent.
+1. The user writes a natural-language staking, vault, or DEX intent.
 2. `intent-parser.ts` converts it into deterministic slots: asset, amount, risk tolerance,
    execution mode, goal, chain, and missing fields.
 3. `puffer-api.ts` reads Puffer public hackathon metrics and falls back to bundled demo data if
    the API is unavailable.
-4. `planner.ts` builds explainable candidates such as read-only market review, ETH to pufETH
-   simulation, or UniFi Vault scan.
-5. `contract-addresses.ts` provides the Puffer mainnet allowlist plus the SDK Holesky PufferVault
-   route (`0x9196830bB4c05504E0A8475A0aD566AceEB6BeC9`).
-6. `policy-engine.ts` runs wallet safety checks before any recommendation is shown.
-7. `puffer-sdk-client.ts` dynamically imports `@pufferfinance/puffer-sdk` for user-triggered
-   Holesky gas estimates without calling `transact`.
-8. `ranker.ts` applies local preference weights only to policy-allowed candidates.
-9. `pufferpilot-workspace.tsx` renders dashboard, agent plan, safety checklist, transaction
-   preview, vault scanner, and feedback controls on the first screen.
+4. `planner.ts` builds explainable candidates such as market review, ETH/stETH/wstETH to pufETH,
+   UniFi Vault scan, and safety lesson.
+5. `contract-addresses.ts` provides allowlisted Puffer mainnet and Holesky contracts.
+6. `policy-engine.ts` runs wallet safety checks before any recommendation is executable.
+7. `puffer-sdk-client.ts` dynamically imports `@pufferfinance/puffer-sdk` for SDK gas estimates,
+   pufETH balance reads, and guarded wallet prompts on `Chain.Holesky` or `Chain.Mainnet`.
+8. `zeroex-aggregator.ts` supports optional user-key 0x quotes for any-token-to-pufETH.
+9. `ranker.ts` applies local preference weights only to policy-allowed candidates.
+10. `pufferpilot-workspace.tsx` renders dashboard, mode selector, agent plan, safety checklist,
+    transaction preview, DEX panel, vault scanner, optional AI, and feedback controls.
 
-## Deterministic Agent Contract
+## Mode Contract
 
-There is no paid LLM dependency in the MVP. The agent uses deterministic rules, explainable
-scores, and local preference learning. The preference model can reorder safe candidates but cannot
-make a denied candidate executable.
+- Demo Mode never touches `window.ethereum`. It uses `MOCK_WALLET`, local balances, fake tx hashes,
+  local SDK estimates, and local 0x-style quotes.
+- Real Wallet Mode is the only mode that calls wallet RPCs, Puffer SDK write helpers, or 0x.
+- Optional AI is off by default. The deterministic planner and policy engine are always primary.
 
 ## Data Contract
 
@@ -45,13 +45,15 @@ Endpoints used:
 - `/protocol/tvl`
 - `/tokens/prices?addresses=...`
 
-The app labels live versus fallback data in the command bar and warning surface.
+## Wallet Contract
 
-## Testnet Wallet Contract
-
-- Default intent chain: Holesky testnet
-- SDK chain: `Chain.Holesky`
-- PufferVault: `0x9196830bB4c05504E0A8475A0aD566AceEB6BeC9`
+- PufferVault Holesky: `0x9196830bB4c05504E0A8475A0aD566AceEB6BeC9`
+- PufferDepositor Holesky: `0x824AC05aeb86A0aD770b8acDe0906d2d4a6c4A8c`
+- PufferVault mainnet / pufETH: `0xD9A442856C234a39a81a089C06451EBAa4306a72`
+- PufferDepositor mainnet: `0x4aa799c5dFc01ee7D790e3bf1a7C2257CE1DcefF`
 - Wallet RPCs used by explicit button clicks: `eth_requestAccounts`, `eth_chainId`,
-  `wallet_switchEthereumChain`, `wallet_addEthereumChain`, and SDK gas estimate RPCs
-- Wallet RPCs never used: `eth_sendTransaction`, `personal_sign`, `eth_signTypedData`, `eth_sign`
+  `eth_getBalance`, `wallet_switchEthereumChain`, `wallet_addEthereumChain`,
+  `eth_sendTransaction`, and Puffer SDK RPCs.
+- Wallet RPCs never used: `personal_sign`, `eth_sign`.
+- Permit RPC boundary: `eth_signTypedData` can only occur after typed `PERMIT` for stETH/wstETH
+  depositor routes.

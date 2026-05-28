@@ -83,6 +83,27 @@ export const PUFFER_CONTRACTS = {
     label: 'Holesky PufferWithdrawalManager',
     source: 'Puffer SDK CONTRACT_ADDRESSES[Chain.Holesky].PufferWithdrawalManager',
   },
+  holeskyWeth: {
+    address: '0x1d181cBd1825e9eBC6AD966878D555A7215FF4F0',
+    chainId: 17000,
+    kind: 'token',
+    label: 'Holesky WETH',
+    source: 'Puffer SDK TOKENS_ADDRESSES[Chain.Holesky].WETH',
+  },
+  holeskySteth: {
+    address: '0x3F1c547b21f65e10480dE3ad8E19fAAC46C95034',
+    chainId: 17000,
+    kind: 'token',
+    label: 'Holesky stETH',
+    source: 'Puffer SDK TOKENS_ADDRESSES[Chain.Holesky].stETH',
+  },
+  holeskyWsteth: {
+    address: '0x8d09a4502Cc8Cf1547aD300E066060D043f6982D',
+    chainId: 17000,
+    kind: 'token',
+    label: 'Holesky wstETH',
+    source: 'Puffer SDK TOKENS_ADDRESSES[Chain.Holesky].wstETH',
+  },
   pufferVault: {
     address: '0xD9A442856C234a39a81a089C06451EBAa4306a72',
     chainId: 1,
@@ -174,6 +195,37 @@ export function getPufferVaultContract(networkId: PufferNetworkId): KnownContrac
   return networkId === 'holesky'
     ? PUFFER_CONTRACTS.holeskyPufferVault
     : PUFFER_CONTRACTS.pufferVault
+}
+
+export function getPufferDepositorContract(networkId: PufferNetworkId): KnownContract {
+  return networkId === 'holesky'
+    ? PUFFER_CONTRACTS.holeskyPufferDepositor
+    : PUFFER_CONTRACTS.pufferDepositor
+}
+
+export function getTokenContractForAsset(
+  asset: 'WETH' | 'stETH' | 'wstETH' | 'pufETH',
+  networkId: PufferNetworkId,
+): KnownContract {
+  if (asset === 'pufETH') {
+    return getPufferVaultContract(networkId)
+  }
+  if (networkId === 'holesky') {
+    if (asset === 'WETH') {
+      return PUFFER_CONTRACTS.holeskyWeth
+    }
+    if (asset === 'stETH') {
+      return PUFFER_CONTRACTS.holeskySteth
+    }
+    return PUFFER_CONTRACTS.holeskyWsteth
+  }
+  if (asset === 'WETH') {
+    return PUFFER_CONTRACTS.weth
+  }
+  if (asset === 'stETH') {
+    return PUFFER_CONTRACTS.steth
+  }
+  return PUFFER_CONTRACTS.wsteth
 }
 
 export function getPufferNetwork(networkId: PufferNetworkId): PufferNetwork {

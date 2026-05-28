@@ -21,6 +21,7 @@ describe('evaluateSafety', () => {
       snapshot: MOCK_PUFFER_SNAPSHOT,
       walletBalanceEth: 0.8,
       networkId: 'holesky',
+      appMode: 'demo',
     })
 
     expect(decision.decision).toBe('deny')
@@ -39,10 +40,88 @@ describe('evaluateSafety', () => {
       snapshot: MOCK_PUFFER_SNAPSHOT,
       walletBalanceEth: 0.8,
       networkId: 'holesky',
+      appMode: 'demo',
     })
 
     expect(decision.decision).toBe('allow_readonly')
     expect(decision.checks.every((check) => check.passed)).toBe(true)
+  })
+
+  it('allows only the Holesky ETH deposit wallet prompt path', () => {
+    const intent = parseIntent('imToken wallet 0.01 ETH Holesky Puffer')
+    const [plan] = planIntent(intent, context)
+    const decision = evaluateSafety({
+      intent,
+      candidate: plan?.candidate,
+      snapshot: MOCK_PUFFER_SNAPSHOT,
+      walletBalanceEth: 0.8,
+      networkId: 'holesky',
+      appMode: 'real',
+    })
+
+    expect(decision.decision).toBe('allow_wallet_prompt')
+    expect(decision.forbiddenCalls).not.toContain('eth_sendTransaction')
+    expect(decision.forbiddenCalls).toEqual(
+      expect.arrayContaining(['personal_sign', 'eth_signTypedData', 'eth_sign']),
+    )
+    expect(decision.checks.find((check) => check.id === 'real_wallet_prompt_guard')?.passed).toBe(
+      true,
+    )
+  })
+
+  it('requires a PERMIT acknowledgement before stETH wallet prompts', () => {
+    const intent = parseIntent('imToken wallet 0.01 stETH Holesky Puffer')
+    const [plan] = planIntent(intent, context)
+    const blocked = evaluateSafety({
+      intent,
+      candidate: plan?.candidate,
+      snapshot: MOCK_PUFFER_SNAPSHOT,
+      walletBalanceEth: 0.8,
+      networkId: 'holesky',
+      appMode: 'real',
+    })
+    const allowed = evaluateSafety({
+      intent,
+      candidate: plan?.candidate,
+      snapshot: MOCK_PUFFER_SNAPSHOT,
+      walletBalanceEth: 0.8,
+      networkId: 'holesky',
+      appMode: 'real',
+      permitSignatureConfirmed: true,
+    })
+
+    expect(blocked.decision).not.toBe('allow_wallet_prompt')
+    expect(blocked.checks.find((check) => check.id === 'permit_signature_scope')?.passed).toBe(
+      false,
+    )
+    expect(allowed.decision).toBe('allow_wallet_prompt')
+    expect(allowed.forbiddenCalls).not.toContain('eth_signTypedData')
+  })
+
+  it('requires MAINNET confirmation before mainnet wallet prompts', () => {
+    const mainnetContext = { ...context, networkId: 'mainnet' as const }
+    const intent = parseIntent('imToken wallet 0.01 ETH mainnet Puffer')
+    const [plan] = planIntent(intent, mainnetContext)
+    const blocked = evaluateSafety({
+      intent,
+      candidate: plan?.candidate,
+      snapshot: MOCK_PUFFER_SNAPSHOT,
+      walletBalanceEth: 0.8,
+      networkId: 'mainnet',
+      appMode: 'real',
+    })
+    const allowed = evaluateSafety({
+      intent,
+      candidate: plan?.candidate,
+      snapshot: MOCK_PUFFER_SNAPSHOT,
+      walletBalanceEth: 0.8,
+      networkId: 'mainnet',
+      appMode: 'real',
+      allowMainnetWalletPrompt: true,
+    })
+
+    expect(blocked.checks.find((check) => check.id === 'mainnet_confirmation')?.passed).toBe(false)
+    expect(allowed.decision).toBe('allow_wallet_prompt')
   })
 
   it('blocks unlimited approval requests in preview policy', () => {
@@ -54,6 +133,7 @@ describe('evaluateSafety', () => {
       snapshot: MOCK_PUFFER_SNAPSHOT,
       walletBalanceEth: 0.8,
       networkId: 'holesky',
+      appMode: 'demo',
     })
 
     expect(decision.checks.find((check) => check.id === 'approval_warning')?.passed).toBe(false)
@@ -69,6 +149,7 @@ describe('evaluateSafety', () => {
       snapshot: MOCK_PUFFER_SNAPSHOT,
       walletBalanceEth: 0.8,
       networkId: 'holesky',
+      appMode: 'demo',
     })
 
     expect(plan?.candidate.contractAddress).toBe('0x9196830bB4c05504E0A8475A0aD566AceEB6BeC9')

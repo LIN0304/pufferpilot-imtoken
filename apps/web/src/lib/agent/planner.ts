@@ -1,4 +1,5 @@
 import {
+  getPufferDepositorContract,
   getPufferNetwork,
   getPufferVaultContract,
   PUFFER_CONTRACTS,
@@ -37,13 +38,28 @@ function candidateGoalFit(intent: ParsedIntent, candidate: PlanCandidate): numbe
   return 0.35
 }
 
+function getStakeAsset(intent: ParsedIntent): 'ETH' | 'stETH' | 'wstETH' {
+  if (intent.asset === 'stETH' || intent.asset === 'wstETH') {
+    return intent.asset
+  }
+  return 'ETH'
+}
+
+function getNetworkPromptLabel(networkId: string): string {
+  return networkId === 'holesky' ? 'Holesky' : 'Mainnet'
+}
+
 export function buildPlanCandidates(
   intent: ParsedIntent,
   context: PlannerContext,
 ): PlanCandidate[] {
-  const preview = estimatePufEthOutput(intent.amount, context.snapshot.rate)
+  const stakeAsset = getStakeAsset(intent)
+  const preview = estimatePufEthOutput(intent.amount, context.snapshot.rate, stakeAsset)
   const network = getPufferNetwork(context.networkId)
   const pufferVault = getPufferVaultContract(context.networkId)
+  const pufferDepositor = getPufferDepositorContract(context.networkId)
+  const stakeContract = stakeAsset === 'ETH' ? pufferVault : pufferDepositor
+  const usesPermit = stakeAsset === 'stETH' || stakeAsset === 'wstETH'
   const bestVault = [...context.snapshot.vaultApys].sort((left, right) => right.apy - left.apy)[0]
   const bestVaultAddress = bestVault?.tokenAddress ?? PUFFER_CONTRACTS.unifiEthVault.address
   const bestVaultLabel = bestVault?.label ?? 'UniFi ETH Vault'
@@ -57,7 +73,7 @@ export function buildPlanCandidates(
       steps: ['Read pufETH rate', 'Read protocol TVL', 'Read vault APY and TVL'],
       requiredApprovals: [],
       contractAddress: pufferVault.address,
-      estimatedGas: '0 gwei in demo mode',
+      estimatedGas: '0 gwei in read-only mode',
       outputAsset: 'pufETH',
       outputAmount: 0,
       walletPromptRequired: false,
@@ -65,26 +81,43 @@ export function buildPlanCandidates(
       reasons: ['Read-only inspection keeps the first step reversible.'],
     },
     {
-      id: 'simulate-eth-to-pufeth',
-      title: 'Simulate ETH to pufETH',
+      id: `simulate-${stakeAsset.toLowerCase()}-to-pufeth`,
+      title:
+        intent.executionMode === 'wallet_prompt'
+          ? `Request ${getNetworkPromptLabel(context.networkId)} ${stakeAsset} to pufETH`
+          : `Simulate ${stakeAsset} to pufETH`,
       action: 'simulate_pufeth',
-      risk: 'low',
+      risk: usesPermit ? 'medium' : 'low',
       steps: [
         'Parse amount',
         'Estimate pufETH output',
-        `Check ${network.label} PufferVault allowlist`,
-        'Show preview only',
+        `Check ${network.label} ${stakeContract.label} allowlist`,
+        usesPermit
+          ? 'Require exact Permit signature before depositor transaction'
+          : 'No ERC-20 approval is needed for native ETH',
+        intent.executionMode === 'wallet_prompt'
+          ? `Require wallet connection and typed ${network.isTestnet ? 'HOLESKY' : 'MAINNET'} confirmation`
+          : 'Show preview only',
       ],
-      requiredApprovals: [],
-      contractAddress: pufferVault.address,
+      requiredApprovals: usesPermit
+        ? [`Exact EIP-2612 Permit signature to ${pufferDepositor.label}`]
+        : [],
+      contractAddress: stakeContract.address,
       estimatedGas: network.isTestnet
-        ? 'SDK Holesky gas estimate available on wallet click'
-        : 'Preview only; real mainnet deposit would require ETH gas',
+        ? `SDK ${getNetworkPromptLabel(context.networkId)} gas estimate available on wallet click`
+        : `SDK ${getNetworkPromptLabel(context.networkId)} gas estimate requires MAINNET confirmation`,
       outputAsset: 'pufETH',
       outputAmount: preview.outputPufEth,
-      walletPromptRequired: false,
-      complexity: 2,
-      reasons: ['ETH deposit does not need ERC-20 approval.', 'Demo mode disables broadcast.'],
+      walletPromptRequired: intent.executionMode === 'wallet_prompt',
+      complexity: usesPermit ? 3 : 2,
+      reasons: [
+        usesPermit
+          ? `${stakeAsset} uses a Permit signature before the PufferDepositor transaction.`
+          : 'ETH deposit does not need ERC-20 approval.',
+        network.isTestnet
+          ? 'Holesky wallet prompts require explicit user confirmation in the wallet.'
+          : 'Mainnet prompts require an extra MAINNET confirmation and should use small amounts.',
+      ],
     },
     {
       id: 'scan-unifi-vault',
@@ -115,7 +148,7 @@ export function buildPlanCandidates(
       risk: 'low',
       steps: [
         'Reject secret handling',
-        'Explain preview-only boundary',
+        'Explain wallet-operation boundary',
         'Keep sensitive data out of storage',
       ],
       requiredApprovals: [],

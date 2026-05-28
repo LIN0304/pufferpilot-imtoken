@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@repo
 import { Progress } from '@repo/ui/components/progress'
 import { StepCard } from '@repo/ui/components/step-card'
 import { toast } from '@repo/ui/components/toast'
+import { Plus, QrCode, Repeat2, Send } from 'lucide-react'
 import { Link } from 'react-router'
 import { checklistSteps, walletAssets } from './mock-data'
 
@@ -29,6 +30,11 @@ function WalletDashboard() {
   const handlePreviewToast = () => {
     toast.success('UI Kit is ready', {
       description: 'You can now build with shared wallet components.',
+    })
+  }
+  const handleWalletAction = (action: string) => {
+    toast.info(`${action} preview only`, {
+      description: 'Mock wallet actions do not request signatures or broadcast transactions.',
     })
   }
 
@@ -87,7 +93,7 @@ function WalletDashboard() {
               <CardTitle>Unified balance</CardTitle>
               <CardDescription>Mock data for starter-kit composition</CardDescription>
             </div>
-            <Badge variant="success">Connected</Badge>
+            <Badge variant="neutral">Mock wallet</Badge>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
@@ -96,12 +102,31 @@ function WalletDashboard() {
             </div>
 
             <ActionBar columns={2} className="xl:grid-cols-4">
-              <ActionButton variant="primary" icon={<Glyph>+</Glyph>}>
+              <ActionButton
+                variant="primary"
+                icon={<Plus className="size-4" />}
+                onClick={() => handleWalletAction('Buy')}
+              >
                 Buy
               </ActionButton>
-              <ActionButton icon={<Glyph>-&gt;</Glyph>}>Send</ActionButton>
-              <ActionButton icon={<Glyph>&lt;&gt;</Glyph>}>Swap</ActionButton>
-              <ActionButton icon={<Glyph>&lt;-</Glyph>}>Receive</ActionButton>
+              <ActionButton
+                icon={<Send className="size-4" />}
+                onClick={() => handleWalletAction('Send')}
+              >
+                Send
+              </ActionButton>
+              <ActionButton
+                icon={<Repeat2 className="size-4" />}
+                onClick={() => handleWalletAction('Swap')}
+              >
+                Swap
+              </ActionButton>
+              <ActionButton
+                icon={<QrCode className="size-4" />}
+                onClick={() => handleWalletAction('Receive')}
+              >
+                Receive
+              </ActionButton>
             </ActionBar>
 
             <div className="space-y-2">

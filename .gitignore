@@ -22,6 +22,7 @@ Thumbs.db
 
 # test
 coverage/
+.playwright-cli/
 
 # misc
 *.log

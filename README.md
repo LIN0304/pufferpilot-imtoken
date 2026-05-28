@@ -4,11 +4,17 @@ PufferPilot is a safety-first AI wallet agent for Puffer staking and UniFi Vault
 It converts natural-language intent into a clear, explainable, and risk-aware Puffer
 participation flow.
 
-The demo reads public Puffer metrics, previews ETH to pufETH and UniFi Vault opportunities,
-checks contract allowlists and approval risks, and learns user preferences locally through a small
-contextual bandit. It does not ask for seed phrases, does not store private keys, does not use paid
-AI APIs, and does not broadcast transactions in demo mode. The execution preview is testnet-first:
-Holesky is the default Puffer SDK route, while mainnet Puffer API data is read-only market context.
+The app reads public Puffer metrics, previews ETH/stETH/wstETH to pufETH and UniFi Vault
+opportunities, checks contract allowlists and approval risks, and learns user preferences locally
+through a small contextual bandit. It does not ask for seed phrases or store private keys. AI is
+optional and off by default; if users want an AI explanation, they bring their own API key.
+
+PufferPilot has two explicit modes:
+
+- **Demo Mode**: fully local, funded mock wallet, executable demo stake and demo aggregator actions,
+  no wallet RPCs and no broadcast.
+- **Real Wallet Mode**: connects imToken or any EIP-1193 injected wallet, reads balances, switches
+  Holesky/mainnet, estimates and requests Puffer SDK wallet prompts only after typed confirmation.
 
 ## What Is Built
 
@@ -16,14 +22,18 @@ Holesky is the default Puffer SDK route, while mainnet Puffer API data is read-o
   vault TVL, and token prices.
 - AI intent parser: deterministic Traditional Chinese / English slot extraction for asset, amount,
   risk, goal, and execution mode.
-- Agent planner: explainable route scoring for read-only review, ETH to pufETH simulation, and
-  UniFi Vault scanning.
+- Agent planner: explainable route scoring for read-only review, ETH/stETH/wstETH to pufETH, UniFi
+  Vault scanning, and a 0x any-token-to-pufETH route.
 - Safety policy engine: seed/private-key refusal, prompt-injection block, allowlist check,
-  approval warning, gas buffer, Holesky testnet scope, and demo-mode broadcast boundary.
+  approval warning, Permit gate, gas buffer, Holesky testnet scope, and mainnet confirmation gate.
 - Transaction preview: expected pufETH output, route, contract address, approval requirement, gas
-  statement, testnet network state, and broadcast disabled state.
-- Testnet wallet preview: EIP-1193 wallet detection, Holesky switch/add-network helper, and
-  `@pufferfinance/puffer-sdk` gas estimate path for `PufferVault.depositETH`.
+  statement, network state, and broadcast boundary.
+- imToken wallet operation: EIP-1193 provider detection, imToken WebView badge, wallet account,
+  chain, native balance, Holesky/mainnet switch helper, pufETH balance read, SDK gas estimate, and
+  guarded `PufferVault.depositETH` / `PufferDepositor.depositStETH` /
+  `PufferDepositor.depositWstETH` wallet prompts.
+- Advanced DEX aggregator: optional 0x quote with user-supplied API key for any-token-to-pufETH
+  transaction preview, exact allowance warning, and guarded mainnet wallet send.
 - Local preference learning: explicit feedback changes future ranking for safe candidates only.
 - Validation: Vitest coverage for parser, planner, policy, API fallback, preference ranking, and
   server render.
@@ -38,29 +48,72 @@ pnpm verify
 
 The web app runs from `apps/web` through the root workspace command.
 
-## Testnet Run Path
+## How To Operate
 
-PufferPilot defaults intent execution to Holesky because the Puffer SDK quick start uses
-`Chain.Holesky` for browser wallet flows. In the transaction preview panel:
+Production URL:
 
-1. Use `Connect` inside imToken or another injected EIP-1193 wallet.
-2. Use `Holesky` to request `wallet_switchEthereumChain` / `wallet_addEthereumChain`.
-3. Use `SDK estimate` to run the Puffer SDK Holesky gas-estimate path.
+```txt
+https://pufferpilot-imtoken.vercel.app/
+```
 
-The app still never calls `transact`, `eth_sendTransaction`, `personal_sign`, `eth_signTypedData`,
-or `eth_sign`.
+imToken download:
+
+```txt
+https://www.token.im/download
+```
+
+### Demo Mode
+
+1. Keep `Demo Mode` selected.
+2. Enter an intent such as `我有 0.3 ETH，想低風險參與 Puffer`.
+3. Click `Plan`.
+4. In `Transaction Preview`, click `Demo wallet`, `SDK estimate`, then `Run demo ETH stake`.
+5. The local pufETH balance updates without wallet RPCs, gas, approvals, or broadcast.
+6. In `DEX Aggregator`, click `Demo quote`, then `Run demo swap`.
+
+### Real Wallet Mode
+
+1. Open the site inside imToken DApp Browser or click `Open imToken`.
+2. Select `Real Wallet Mode`.
+3. Select `Holesky` for testnet or `Mainnet` for real Puffer contracts.
+4. Click `Connect`, then `Switch Holesky` or `Switch Mainnet`.
+5. Use an ETH, stETH, or wstETH intent.
+6. Click `SDK estimate`.
+7. Type `HOLESKY` or `MAINNET`. For stETH/wstETH, also type `PERMIT`.
+8. Click the request button so imToken or the injected wallet shows the final confirmation.
+
+### Advanced 0x Route
+
+1. Select `Real Wallet Mode` and `Mainnet`.
+2. Connect wallet and type `MAINNET` in the transaction panel.
+3. In `DEX Aggregator`, paste your own 0x API key.
+4. Choose or paste a sell token address.
+5. Click `Real 0x quote`.
+6. If exact allowance is already available, `Send 0x tx` asks the wallet to send the aggregator
+   transaction. If allowance is missing, the UI blocks and tells the user to approve the exact
+   sell amount first.
+
+The app does not request `personal_sign` or `eth_sign`. `eth_signTypedData` is only reachable for
+stETH/wstETH Permit routes after the user types `PERMIT`.
 
 ## Safety Boundary
 
-PufferPilot is preview-only by default. The MVP never calls:
+PufferPilot is preview-first and demo-first by default. It never asks for wallet secrets and never
+auto-broadcasts. Real wallet prompts require:
 
-- `eth_sendTransaction`
+- Real Wallet Mode
+- connected wallet
+- selected network shown in the UI
+- allowlisted Puffer contract or 0x quote target
+- typed `HOLESKY` or `MAINNET`
+- typed `PERMIT` for stETH/wstETH Permit routes
+
+The app never calls:
+
 - `personal_sign`
-- `eth_signTypedData`
 - `eth_sign`
 
-Wallet runtime detection and Holesky estimate are included for imToken/injected-provider context,
-but real signing and broadcast are intentionally out of scope for this zero-cost demo.
+`eth_signTypedData` is blocked except the exact Permit gate described above.
 
 ## Data Provenance
 
@@ -78,7 +131,7 @@ SDK alignment:
 
 ```txt
 @pufferfinance/puffer-sdk
-PufferClientHelpers + PufferClient on Chain.Holesky
+PufferClientHelpers + PufferClient on Chain.Holesky / Chain.Mainnet
 ```
 
 ## Docs

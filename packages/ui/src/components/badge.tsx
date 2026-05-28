@@ -18,6 +18,8 @@ const badgeVariants = cva(
           'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         primary: 'border-transparent bg-primary-soft text-primary',
         success: 'border-transparent bg-success-surface text-success-text',
+        warning: 'border-transparent bg-warning-surface text-warning-text',
+        danger: 'border-transparent bg-error-surface text-error-text',
         neutral: 'border-transparent bg-secondary text-secondary-foreground',
         positive: 'border-transparent bg-positive-surface text-positive',
       },

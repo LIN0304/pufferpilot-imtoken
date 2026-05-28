@@ -13,6 +13,8 @@ describe('UiKitPage', () => {
 
     expect(html).toContain('UI Kit Gallery')
     expect(html).toContain('Action bar')
+    expect(html).toContain('Gallery controls are ready.')
+    expect(html).toContain('Search preview')
     expect(html).toContain('Guided flows')
   })
 })

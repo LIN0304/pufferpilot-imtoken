@@ -15,6 +15,9 @@ interface PolicyInput {
   snapshot: PufferSnapshot
   walletBalanceEth: number
   networkId: PufferNetworkId
+  appMode?: 'demo' | 'real'
+  allowMainnetWalletPrompt?: boolean
+  permitSignatureConfirmed?: boolean
 }
 
 function check(id: string, label: string, passed: boolean, evidence: string): SafetyCheck {
@@ -28,10 +31,37 @@ function check(id: string, label: string, passed: boolean, evidence: string): Sa
 }
 
 export function evaluateSafety(input: PolicyInput): SafetyDecision {
-  const { intent, candidate, snapshot, walletBalanceEth, networkId } = input
+  const {
+    intent,
+    candidate,
+    snapshot,
+    walletBalanceEth,
+    networkId,
+    appMode = 'demo',
+    allowMainnetWalletPrompt = false,
+    permitSignatureConfirmed = false,
+  } = input
   const network = getPufferNetwork(networkId)
   const redactions = intent.mentionsSecret ? ['secret_material'] : []
-  const forbiddenCalls = ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_sign']
+  const usesPermit = intent.asset === 'stETH' || intent.asset === 'wstETH'
+  const walletAssetSupported =
+    intent.asset === 'ETH' || intent.asset === 'stETH' || intent.asset === 'wstETH'
+  const requiredApprovalSafe =
+    (candidate?.requiredApprovals.length ?? 0) === 0 || (usesPermit && permitSignatureConfirmed)
+  const networkPromptConfirmed = network.isTestnet || allowMainnetWalletPrompt
+  const walletPromptAllowed =
+    intent.executionMode === 'wallet_prompt' &&
+    appMode === 'real' &&
+    networkPromptConfirmed &&
+    candidate?.action === 'simulate_pufeth' &&
+    walletAssetSupported &&
+    intent.amount > 0 &&
+    requiredApprovalSafe
+  const forbiddenCalls = walletPromptAllowed
+    ? usesPermit && permitSignatureConfirmed
+      ? ['personal_sign', 'eth_sign']
+      : ['personal_sign', 'eth_signTypedData', 'eth_sign']
+    : ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_sign']
 
   const candidateAddress = candidate?.contractAddress ?? getPufferVaultContract(networkId).address
   const knownContract = getKnownContract(candidateAddress)
@@ -46,12 +76,14 @@ export function evaluateSafety(input: PolicyInput): SafetyDecision {
   const chainSupported =
     !intent.flags.includes('unsupported_chain_requested') &&
     (knownContract
-      ? knownContract.chainId === network.chainId || knownContract.chainId === 1
+      ? knownContract.chainId === network.chainId ||
+        (candidate?.action === 'simulate_unifi_vault' && knownContract.chainId === 1)
       : false)
   const previewDataUsable =
     snapshot.mode === 'live' ||
     intent.executionMode === 'simulation' ||
-    candidate?.action === 'view_only'
+    candidate?.action === 'view_only' ||
+    walletPromptAllowed
 
   const checks: SafetyCheck[] = [
     check(
@@ -67,10 +99,20 @@ export function evaluateSafety(input: PolicyInput): SafetyDecision {
       'Safety policy cannot be bypassed by user prompt.',
     ),
     check(
-      'simulation_mode_default',
-      'Preview-only mode remains default',
-      intent.executionMode !== 'wallet_prompt',
-      SECURITY_COPY.demoMode,
+      'real_wallet_prompt_guard',
+      'Wallet prompt is mode-gated and user-confirmed',
+      intent.executionMode !== 'wallet_prompt' || walletPromptAllowed,
+      intent.executionMode === 'wallet_prompt'
+        ? network.isTestnet
+          ? SECURITY_COPY.testnetWalletPrompt
+          : SECURITY_COPY.mainnetWalletPrompt
+        : SECURITY_COPY.demoMode,
+    ),
+    check(
+      'mainnet_confirmation',
+      'Mainnet requires typed MAINNET confirmation',
+      intent.executionMode !== 'wallet_prompt' || network.isTestnet || allowMainnetWalletPrompt,
+      `${network.label} wallet prompt confirmation: ${network.isTestnet ? 'testnet' : allowMainnetWalletPrompt ? 'MAINNET typed' : 'missing'}.`,
     ),
     check(
       'contract_address_allowlist',
@@ -85,14 +127,20 @@ export function evaluateSafety(input: PolicyInput): SafetyDecision {
       SECURITY_COPY.approval,
     ),
     check(
+      'permit_signature_scope',
+      'Permit signatures are explicit and exact amount',
+      !usesPermit || intent.executionMode !== 'wallet_prompt' || permitSignatureConfirmed,
+      usesPermit ? SECURITY_COPY.permit : 'No Permit signature is required for this route.',
+    ),
+    check(
       'amount_not_all_funds',
       'Amount leaves gas buffer',
       noMaxSpend && amountWithinBalance,
-      `${intent.amount || 0} ETH requested against ${walletBalanceEth} ETH mock balance.`,
+      `${intent.amount || 0} ETH requested against ${walletBalanceEth} ETH available balance context.`,
     ),
     check(
       'supported_chain',
-      'Puffer route supports Holesky testnet first',
+      'Puffer route supports the selected network',
       chainSupported,
       `${network.label} chainId ${network.chainId}; contract chainId ${knownContract?.chainId ?? 'unknown'}.`,
     ),
@@ -135,7 +183,10 @@ export function evaluateSafety(input: PolicyInput): SafetyDecision {
   }
 
   return {
-    decision: candidate?.walletPromptRequired ? 'allow_wallet_prompt' : 'allow_readonly',
+    decision:
+      walletPromptAllowed || candidate?.walletPromptRequired
+        ? 'allow_wallet_prompt'
+        : 'allow_readonly',
     checks,
     redactions,
     forbiddenCalls,

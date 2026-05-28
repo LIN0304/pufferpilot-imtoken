@@ -16,7 +16,9 @@ import { StatCell } from '@repo/ui/components/stat-cell'
 import { StepCard } from '@repo/ui/components/step-card'
 import { Switch } from '@repo/ui/components/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@repo/ui/components/tabs'
-import type { ReactNode } from 'react'
+import { toast } from '@repo/ui/components/toast'
+import { ArrowLeft, Bell, CircleHelp, Plus, QrCode, Repeat2, Send, UserCircle } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router'
 
 function TokenAvatar({ symbol }: { symbol: string }) {
@@ -52,8 +54,19 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function UiKitPage() {
+  const [selectedAssetView, setSelectedAssetView] = useState<'all' | 'tokens' | 'nfts'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [lastAction, setLastAction] = useState('Gallery controls are ready.')
+
+  const announceAction = (action: string) => {
+    setLastAction(`${action} preview selected.`)
+    toast.info(`${action} preview`, {
+      description: 'UI Kit interactions are local-only demo feedback.',
+    })
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-10">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-10 px-4 py-6 sm:px-6 lg:px-0">
       <header className="flex items-start justify-between gap-6">
         <div>
           <h1 className="text-title-lg font-bold tracking-tight text-foreground">UI Kit Gallery</h1>
@@ -66,17 +79,35 @@ function UiKitPage() {
           </p>
         </div>
         <Button variant="outline" asChild className="mt-1 shrink-0">
-          <Link to="/">← Back</Link>
+          <Link to="/">
+            <ArrowLeft className="size-4" />
+            Back
+          </Link>
         </Button>
       </header>
 
+      <div
+        aria-live="polite"
+        className="rounded-xl border border-info-border bg-surface-blue px-4 py-3 text-body-sm text-primary"
+      >
+        {lastAction}
+      </div>
+
       <Group label="Button">
         <div className="flex flex-wrap gap-3">
-          <Button>Primary</Button>
-          <Button variant="secondary">Secondary</Button>
-          <Button variant="outline">Outline</Button>
-          <Button variant="ghost">Ghost</Button>
-          <Button variant="destructive">Destructive</Button>
+          <Button onClick={() => announceAction('Primary button')}>Primary</Button>
+          <Button variant="secondary" onClick={() => announceAction('Secondary button')}>
+            Secondary
+          </Button>
+          <Button variant="outline" onClick={() => announceAction('Outline button')}>
+            Outline
+          </Button>
+          <Button variant="ghost" onClick={() => announceAction('Ghost button')}>
+            Ghost
+          </Button>
+          <Button variant="destructive" onClick={() => announceAction('Destructive button')}>
+            Destructive
+          </Button>
         </div>
       </Group>
 
@@ -87,26 +118,73 @@ function UiKitPage() {
           <Badge variant="positive">+2.4%</Badge>
           <Badge variant="destructive">Error</Badge>
           <span className="mx-1 h-4 w-px bg-border" />
-          <Chip selected>All assets</Chip>
-          <Chip>Tokens</Chip>
-          <Chip>NFTs</Chip>
+          <Chip selected={selectedAssetView === 'all'} onClick={() => setSelectedAssetView('all')}>
+            All assets
+          </Chip>
+          <Chip
+            selected={selectedAssetView === 'tokens'}
+            onClick={() => setSelectedAssetView('tokens')}
+          >
+            Tokens
+          </Chip>
+          <Chip
+            selected={selectedAssetView === 'nfts'}
+            onClick={() => setSelectedAssetView('nfts')}
+          >
+            NFTs
+          </Chip>
         </div>
+        <div className="text-caption text-muted-foreground">Selected view: {selectedAssetView}</div>
       </Group>
 
       <Group label="Action bar · Icon button">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <ActionBar columns={2} className="w-full sm:grid-cols-4 lg:max-w-xl">
-            <ActionButton variant="primary" icon={<Glyph>+</Glyph>}>
+            <ActionButton
+              variant="primary"
+              icon={<Plus className="size-4" />}
+              onClick={() => announceAction('Buy')}
+            >
               Buy
             </ActionButton>
-            <ActionButton icon={<Glyph>-&gt;</Glyph>}>Send</ActionButton>
-            <ActionButton icon={<Glyph>&lt;&gt;</Glyph>}>Swap</ActionButton>
-            <ActionButton icon={<Glyph>&lt;-</Glyph>}>Receive</ActionButton>
+            <ActionButton icon={<Send className="size-4" />} onClick={() => announceAction('Send')}>
+              Send
+            </ActionButton>
+            <ActionButton
+              icon={<Repeat2 className="size-4" />}
+              onClick={() => announceAction('Swap')}
+            >
+              Swap
+            </ActionButton>
+            <ActionButton
+              icon={<QrCode className="size-4" />}
+              onClick={() => announceAction('Receive')}
+            >
+              Receive
+            </ActionButton>
           </ActionBar>
           <div className="flex items-center gap-2 lg:shrink-0">
-            <IconButton icon={<Glyph>?</Glyph>} label="Help" variant="ghost" size="md" />
-            <IconButton icon={<Glyph>!</Glyph>} label="Notifications" variant="muted" size="md" />
-            <IconButton icon={<Glyph>0x</Glyph>} label="Account" variant="foreground" size="md" />
+            <IconButton
+              icon={<CircleHelp className="size-5" />}
+              label="Help"
+              variant="ghost"
+              size="md"
+              onClick={() => announceAction('Help')}
+            />
+            <IconButton
+              icon={<Bell className="size-5" />}
+              label="Notifications"
+              variant="muted"
+              size="md"
+              onClick={() => announceAction('Notifications')}
+            />
+            <IconButton
+              icon={<UserCircle className="size-5" />}
+              label="Account"
+              variant="foreground"
+              size="md"
+              onClick={() => announceAction('Account')}
+            />
           </div>
         </div>
       </Group>
@@ -168,7 +246,15 @@ function UiKitPage() {
       </Group>
 
       <Group label="Input · Switch · Tabs">
-        <Input aria-label="Search tokens" placeholder="Search tokens or addresses" />
+        <Input
+          aria-label="Search tokens"
+          placeholder="Search tokens or addresses"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+        />
+        <div className="rounded-xl bg-background px-4 py-3 text-body-sm text-muted-foreground">
+          Search preview: {searchQuery || 'Type a token symbol or address'}
+        </div>
         <div className="flex items-center justify-between rounded-xl bg-background p-4">
           <div>
             <div className="text-body-md font-semibold">Hide small balances</div>

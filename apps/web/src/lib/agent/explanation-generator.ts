@@ -19,6 +19,8 @@ export function generatePlanExplanation(
   return [
     `Intent: ${intent.amount || 'read-only'} ${intent.asset}, ${intent.riskTolerance} risk, ${intent.executionMode} mode.`,
     ...plan.explanation,
-    'No mainnet transaction is broadcast in this demo.',
+    intent.executionMode === 'wallet_prompt'
+      ? 'Wallet prompts require explicit confirmation and the wallet remains the final approval screen.'
+      : 'No transaction is broadcast in Demo or simulation mode.',
   ]
 }

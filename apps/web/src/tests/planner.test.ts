@@ -21,6 +21,26 @@ describe('planIntent', () => {
     expect(plans[0]?.candidate.walletPromptRequired).toBe(false)
   })
 
+  it('marks Holesky imToken execution as an explicit wallet prompt route', () => {
+    const intent = parseIntent('imToken wallet 0.01 ETH Holesky Puffer')
+    const plans = planIntent(intent, context)
+
+    expect(intent.executionMode).toBe('wallet_prompt')
+    expect(plans[0]?.candidate.id).toBe('simulate-eth-to-pufeth')
+    expect(plans[0]?.candidate.title).toBe('Request Holesky ETH to pufETH')
+    expect(plans[0]?.candidate.walletPromptRequired).toBe(true)
+  })
+
+  it('routes stETH and wstETH through PufferDepositor with a Permit warning', () => {
+    const intent = parseIntent('wallet 0.1 stETH Holesky Puffer')
+    const plans = planIntent(intent, context)
+
+    expect(plans[0]?.candidate.id).toBe('simulate-steth-to-pufeth')
+    expect(plans[0]?.candidate.contractAddress).toBe('0x824AC05aeb86A0aD770b8acDe0906d2d4a6c4A8c')
+    expect(plans[0]?.candidate.requiredApprovals[0]).toContain('Permit')
+    expect(plans[0]?.candidate.risk).toBe('medium')
+  })
+
   it('does not recommend vault exposure for low-risk users by default', () => {
     const intent = parseIntent('I have 0.5 ETH and want low risk Puffer')
     const plans = planIntent(intent, context)

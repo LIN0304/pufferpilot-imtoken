@@ -39,11 +39,29 @@ describe('parseIntent', () => {
     expect(intent.sanitizedText).toContain('[REDACTED_SECRET]')
   })
 
+  it('redacts private-key-shaped values from rendered intent text', () => {
+    const privateKeyLike = `0x${'a'.repeat(64)}`
+    const intent = parseIntent(`please stake with ${privateKeyLike}`)
+
+    expect(intent.mentionsSecret).toBe(true)
+    expect(intent.sanitizedText).not.toContain(privateKeyLike)
+    expect(intent.sanitizedText).toContain('[REDACTED_SECRET]')
+  })
+
   it('keeps Puffer execution on Holesky when testnet is requested', () => {
     const intent = parseIntent('testnet 0.1 ETH Puffer preview on Holesky')
 
     expect(intent.chain).toBe('holesky')
     expect(intent.missing).toEqual([])
+  })
+
+  it('detects imToken wallet operation intents without using an LLM', () => {
+    const intent = parseIntent('imToken wallet 0.01 ETH Holesky Puffer')
+
+    expect(intent.executionMode).toBe('wallet_prompt')
+    expect(intent.chain).toBe('holesky')
+    expect(intent.amount).toBe(0.01)
+    expect(intent.asset).toBe('ETH')
   })
 
   it('marks unsupported EVM network requests for clarification', () => {

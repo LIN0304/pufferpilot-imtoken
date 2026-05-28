@@ -1,16 +1,38 @@
 # Submission Notes
 
-PufferPilot is a safety-first AI wallet agent for Puffer staking and UniFi Vault exploration.
-It converts user intent into a clear, explainable, and risk-aware Puffer participation flow.
+PufferPilot is a safety-first AI wallet mini app for Puffer staking, pufETH, UniFi Vault discovery,
+and imToken-compatible wallet operation.
 
-The app reads Puffer public metrics, previews ETH to pufETH and UniFi vault opportunities, checks
-contract allowlists and approval risks, and learns user preferences locally through an on-device
-contextual bandit.
+The app reads Puffer public metrics, previews ETH/stETH/wstETH to pufETH, checks contract
+allowlists and approval or Permit risks, displays pufETH balance/rate, shows UniFi Vault
+opportunities, and learns user preferences locally through an on-device contextual bandit.
 
-PufferPilot does not ask for seed phrases, does not store private keys, does not send user data to
-paid AI APIs, and does not broadcast transactions in demo mode.
+## Mode Contract
 
-For testnet execution, PufferPilot defaults to Holesky and uses the official Puffer SDK
-`PufferClient` / `PufferClientHelpers` path for a user-triggered `depositETH` gas estimate. The
-testnet route checks the Holesky PufferVault allowlist address and can request wallet network
-switching, but it never calls `transact` or `eth_sendTransaction`.
+- Demo Mode: funded mock wallet, executable local stake and DEX flows, no wallet RPCs.
+- Real Wallet Mode: connects imToken or any EIP-1193 wallet, reads balances, switches networks,
+  estimates Puffer SDK gas, and can request wallet prompts only after typed confirmation.
+
+## Base Challenge Coverage
+
+- Connect wallet: EIP-1193 provider detection and explicit `eth_requestAccounts`.
+- Stake ETH/stETH/wstETH to mint pufETH: official Puffer SDK `PufferVault.depositETH`,
+  `PufferDepositor.depositStETH`, and `PufferDepositor.depositWstETH`.
+- Display pufETH balance/rate: SDK balance read plus live Puffer public API rate.
+- Show UniFi Vault opportunities: APY/TVL scanner with risk-first ranking.
+- Guide safe participation: deterministic policy engine, allowlist, gas/approval/Permit warnings,
+  confirmation gates, and secret refusal.
+
+## Advanced Coverage
+
+The DEX Aggregator panel supports a user-supplied 0x API key for mainnet any-token-to-pufETH quote
+and transaction preview. It blocks transaction send when exact allowance is missing and requires
+`MAINNET` before the wallet can be asked to send the aggregator transaction.
+
+## Safety Statement
+
+PufferPilot does not ask for seed phrases, does not store private keys, and does not auto-execute
+transactions. Optional AI is off by default; users must provide their own API key, and deterministic
+safety policy still controls execution. `personal_sign` and `eth_sign` are never requested.
+`eth_signTypedData` is reachable only for exact stETH/wstETH Permit routes after the user types
+`PERMIT`.

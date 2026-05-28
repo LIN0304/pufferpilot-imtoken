@@ -13,6 +13,7 @@ describe('WalletDashboard', () => {
 
     expect(html).toContain('Wallet UI Starter Kit')
     expect(html).toContain('Unified balance')
+    expect(html).toContain('Mock wallet')
     expect(html).toContain('ETH')
   })
 })
