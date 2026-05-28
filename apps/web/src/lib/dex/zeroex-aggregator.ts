@@ -133,9 +133,28 @@ export async function getZeroExPufEthQuote({
   }
 }
 
-export function getDemoAggregatorQuote(sellToken: string, sellAmountWei: string): AggregatorQuote {
+export function getDemoAggregatorQuote(
+  sellToken: string,
+  sellAmountWei: string,
+  options: { sellTokenSymbol?: string; sellDecimals?: number } = {},
+): AggregatorQuote {
   const sellAmount = BigInt(sellAmountWei || '0')
-  const demoBuyAmount = (sellAmount * 997n) / 1000n
+  const sellDecimals = options.sellDecimals ?? 18
+  const normalizedSellAmount =
+    sellDecimals === 18
+      ? sellAmount
+      : sellDecimals < 18
+        ? sellAmount * 10n ** BigInt(18 - sellDecimals)
+        : sellAmount / 10n ** BigInt(sellDecimals - 18)
+  const demoRateBySymbol: Record<string, bigint> = {
+    ETH: 997_000n,
+    WETH: 997_000n,
+    stETH: 997_000n,
+    wstETH: 1_160_000n,
+    USDC: 262n,
+  }
+  const rate = demoRateBySymbol[options.sellTokenSymbol ?? ''] ?? 940_000n
+  const demoBuyAmount = (normalizedSellAmount * rate) / 1_000_000n
 
   return {
     provider: 'demo',

@@ -9,13 +9,15 @@ opportunities, and learns user preferences locally through an on-device contextu
 
 ## Mode Contract
 
-- Demo Mode: funded mock wallet, executable local stake and DEX flows, no wallet RPCs.
-- Real Wallet Mode: connects imToken or any EIP-1193 wallet, reads balances, switches networks,
-  estimates Puffer SDK gas, and can request wallet prompts only after typed confirmation.
+- Demo Mode: funded mock wallet, executable local stake and Exchange flows, no wallet RPCs.
+- Real Wallet Mode: detects imToken, MetaMask, or another EIP-1193/EIP-6963 injected wallet, reads
+  balances, switches networks, estimates Puffer SDK gas, and can request wallet prompts only after
+  typed confirmation.
 
 ## Base Challenge Coverage
 
-- Connect wallet: EIP-1193 provider detection and explicit `eth_requestAccounts`.
+- Connect wallet: EIP-1193/EIP-6963 provider detection, provider selector, and explicit
+  `eth_requestAccounts`.
 - Stake ETH/stETH/wstETH to mint pufETH: official Puffer SDK `PufferVault.depositETH`,
   `PufferDepositor.depositStETH`, and `PufferDepositor.depositWstETH`.
 - Display pufETH balance/rate: SDK balance read plus live Puffer public API rate.
@@ -25,9 +27,9 @@ opportunities, and learns user preferences locally through an on-device contextu
 
 ## Advanced Coverage
 
-The DEX Aggregator panel supports a user-supplied 0x API key for mainnet any-token-to-pufETH quote
-and transaction preview. It blocks transaction send when exact allowance is missing and requires
-`MAINNET` before the wallet can be asked to send the aggregator transaction.
+The Exchange panel supports local demo balance updates plus a user-supplied 0x API key for mainnet
+any-token-to-pufETH quote and transaction preview. It blocks transaction send when exact allowance is
+missing and requires `MAINNET` before the wallet can be asked to send the aggregator transaction.
 
 ## Safety Statement
 

@@ -4,13 +4,38 @@ type EthereumRequestArgs = {
 }
 
 type EthereumProviderEvent = 'accountsChanged' | 'chainChanged'
+type Eip6963AnnounceEvent = CustomEvent<Eip6963ProviderDetail>
 
 export interface EthereumProviderLike {
   isImToken?: boolean
   isMetaMask?: boolean
+  isCoinbaseWallet?: boolean
+  providers?: EthereumProviderLike[]
   on?(event: EthereumProviderEvent, listener: (payload: unknown) => void): void
   removeListener?(event: EthereumProviderEvent, listener: (payload: unknown) => void): void
   request(args: EthereumRequestArgs): Promise<unknown>
+}
+
+export interface Eip6963ProviderDetail {
+  info: {
+    uuid: string
+    name: string
+    icon?: string
+    rdns?: string
+  }
+  provider: EthereumProviderLike
+}
+
+export interface WalletProviderOption {
+  id: string
+  label: string
+  rdns?: string
+  icon?: string
+  isImToken: boolean
+  isMetaMask: boolean
+  isCoinbaseWallet: boolean
+  source: 'eip6963' | 'injected'
+  provider: EthereumProviderLike
 }
 
 export interface WalletTransactionRequest {
@@ -29,10 +54,113 @@ declare global {
   }
 }
 
-export function detectWalletRuntime(): {
+function providerLabel(provider: EthereumProviderLike, fallback = 'Injected wallet') {
+  if (provider.isImToken) {
+    return 'imToken'
+  }
+  if (provider.isMetaMask) {
+    return 'MetaMask'
+  }
+  if (provider.isCoinbaseWallet) {
+    return 'Coinbase Wallet'
+  }
+  return fallback
+}
+
+function normalizeProviderOption(
+  provider: EthereumProviderLike,
+  index: number,
+  detail?: Eip6963ProviderDetail,
+): WalletProviderOption {
+  const label = detail?.info.name ?? providerLabel(provider)
+  const rdns = detail?.info.rdns
+  const id = `${detail ? 'eip6963' : 'injected'}:${rdns ?? detail?.info.uuid ?? label}:${index}`
+
+  return {
+    id,
+    label,
+    rdns,
+    icon: detail?.info.icon,
+    isImToken: Boolean(window.imToken || provider.isImToken || rdns?.includes('imtoken')),
+    isMetaMask: Boolean(provider.isMetaMask || rdns?.includes('metamask')),
+    isCoinbaseWallet: Boolean(provider.isCoinbaseWallet || rdns?.includes('coinbase')),
+    source: detail ? 'eip6963' : 'injected',
+    provider,
+  }
+}
+
+function dedupeProviders(providers: WalletProviderOption[]) {
+  const seen = new Set<EthereumProviderLike>()
+  const result: WalletProviderOption[] = []
+
+  for (const option of providers) {
+    if (seen.has(option.provider)) {
+      continue
+    }
+    seen.add(option.provider)
+    result.push(option)
+  }
+
+  return result
+}
+
+export function getInjectedWalletProviders(): WalletProviderOption[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  const ethereum = window.ethereum
+  if (!ethereum) {
+    return []
+  }
+
+  const providers = Array.isArray(ethereum.providers) ? ethereum.providers : [ethereum]
+  return dedupeProviders(
+    providers.map((provider, index) => normalizeProviderOption(provider, index)),
+  )
+}
+
+export async function discoverInjectedWalletProviders(
+  timeoutMs = 250,
+): Promise<WalletProviderOption[]> {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  const announced: WalletProviderOption[] = []
+
+  await new Promise<void>((resolve) => {
+    const timerId = window.setTimeout(() => {
+      window.removeEventListener('eip6963:announceProvider', handleAnnouncement as EventListener)
+      resolve()
+    }, timeoutMs)
+
+    const handleAnnouncement = (event: Event) => {
+      const detail = (event as Eip6963AnnounceEvent).detail
+      if (!detail?.provider) {
+        return
+      }
+      announced.push(normalizeProviderOption(detail.provider, announced.length, detail))
+    }
+
+    window.addEventListener('eip6963:announceProvider', handleAnnouncement as EventListener)
+    window.dispatchEvent(new Event('eip6963:requestProvider'))
+
+    if (timeoutMs <= 0) {
+      window.clearTimeout(timerId)
+      window.removeEventListener('eip6963:announceProvider', handleAnnouncement as EventListener)
+      resolve()
+    }
+  })
+
+  return dedupeProviders([...announced, ...getInjectedWalletProviders()])
+}
+
+export function detectWalletRuntime(providerOverride?: EthereumProviderLike): {
   hasProvider: boolean
   isImToken: boolean
   isMetaMask: boolean
+  isCoinbaseWallet: boolean
   mode: 'mock' | 'injected'
   chainId?: number
 } {
@@ -41,16 +169,18 @@ export function detectWalletRuntime(): {
       hasProvider: false,
       isImToken: false,
       isMetaMask: false,
+      isCoinbaseWallet: false,
       mode: 'mock',
     }
   }
 
-  const provider = window.ethereum
+  const provider = providerOverride ?? window.ethereum
 
   return {
     hasProvider: Boolean(provider),
     isImToken: Boolean(window.imToken || provider?.isImToken),
     isMetaMask: Boolean(provider?.isMetaMask),
+    isCoinbaseWallet: Boolean(provider?.isCoinbaseWallet),
     mode: provider ? 'injected' : 'mock',
   }
 }
@@ -169,8 +299,9 @@ export async function switchOrAddEthereumChain(params: {
     symbol: string
     decimals: number
   }
+  provider?: EthereumProviderLike
 }): Promise<void> {
-  const provider = getProvider()
+  const provider = getProvider(params.provider)
   if (!provider) {
     throw new Error('No injected wallet provider is available.')
   }

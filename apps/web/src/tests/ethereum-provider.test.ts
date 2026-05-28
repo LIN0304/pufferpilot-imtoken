@@ -3,6 +3,7 @@ import type { EthereumProviderLike } from '../lib/wallet/ethereum-provider'
 import {
   detectWalletRuntime,
   formatWeiToEth,
+  getInjectedWalletProviders,
   readNativeBalance,
   readWalletChainId,
   requestPreviewOnlyAccounts,
@@ -29,6 +30,29 @@ describe('ethereum provider helpers', () => {
       isImToken: true,
       mode: 'injected',
     })
+  })
+
+  it('lists multiple injected wallet providers for selector UI', () => {
+    const metaMaskProvider: EthereumProviderLike = {
+      isMetaMask: true,
+      request: vi.fn(),
+    }
+    const imTokenProvider: EthereumProviderLike = {
+      isImToken: true,
+      request: vi.fn(),
+    }
+    vi.stubGlobal('window', {
+      ethereum: {
+        providers: [metaMaskProvider, imTokenProvider],
+        request: vi.fn(),
+      },
+    })
+
+    const providers = getInjectedWalletProviders()
+
+    expect(providers.map((provider) => provider.label)).toEqual(['MetaMask', 'imToken'])
+    expect(providers[0]?.isMetaMask).toBe(true)
+    expect(providers[1]?.isImToken).toBe(true)
   })
 
   it('reads accounts, chain id, and native balance through EIP-1193 RPCs', async () => {

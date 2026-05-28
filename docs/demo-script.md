@@ -16,6 +16,8 @@ Expected:
 - Transaction preview shows funded mock ETH/stETH/wstETH/pufETH assets.
 - Click `Demo wallet`, `SDK estimate`, then `Run demo ETH stake`.
 - Expected pufETH balance increases locally. No wallet RPC, gas, approval, Permit, or broadcast.
+- In `Exchange`, the From/To swap panel is visible. Click `Demo quote`, then `Run demo swap`.
+- Expected demo sell-token balance decreases and demo pufETH balance increases locally.
 
 ## Flow 2: Real imToken Wallet
 
@@ -29,7 +31,7 @@ Expected:
 
 - Select `Real Wallet Mode`.
 - Open `https://pufferpilot-imtoken.vercel.app/` in imToken DApp Browser, or click `Open imToken`.
-- Click `Connect`.
+- Choose the detected imToken provider and click `Connect selected`.
 - Click `Switch Holesky`.
 - Click `SDK estimate`.
 - Type `HOLESKY`.
@@ -57,7 +59,7 @@ Expected:
 
 - Select `Real Wallet Mode` and `Mainnet`.
 - Connect wallet and type `MAINNET`.
-- In `DEX Aggregator`, choose WETH/stETH/wstETH/USDC or paste a token address.
+- In `Exchange`, choose WETH/stETH/wstETH/USDC or paste a token address.
 - Paste your own 0x API key.
 - Click `Real 0x quote`.
 - If allowance is needed, the UI blocks transaction send and asks for exact allowance first.

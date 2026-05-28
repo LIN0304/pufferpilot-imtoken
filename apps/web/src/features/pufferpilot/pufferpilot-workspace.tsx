@@ -9,6 +9,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Brain,
+  Cable,
   CheckCircle2,
   CircleAlert,
   CircleDollarSign,
@@ -20,7 +21,9 @@ import {
   KeyRound,
   LockKeyhole,
   MessageSquareText,
+  PlugZap,
   RefreshCw,
+  Repeat2,
   SendHorizontal,
   ShieldCheck,
   ShieldX,
@@ -75,6 +78,7 @@ import { evaluateSafety } from '../../lib/safety/policy-engine'
 import { formatNumber, formatPercent, formatUsd, shortenAddress } from '../../lib/utils/format'
 import {
   detectWalletRuntime,
+  discoverInjectedWalletProviders,
   formatWeiToEth,
   parseChainId,
   readNativeBalance,
@@ -83,6 +87,7 @@ import {
   requestWalletAccounts,
   sendWalletTransaction,
   switchOrAddEthereumChain,
+  type WalletProviderOption,
   weiToEthNumber,
 } from '../../lib/wallet/ethereum-provider'
 import { MOCK_WALLET } from '../../lib/wallet/mock-wallet'
@@ -91,6 +96,8 @@ const DEFAULT_PROMPT = '我有 0.3 ETH，想低風險參與 Puffer，先用 Demo
 const IMTOKEN_DOWNLOAD_URL = 'https://www.token.im/download'
 const IMTOKEN_DAPP_BROWSER_HELP_URL =
   'https://support.token.im/hc/en-us/articles/360015520514-How-to-Use-the-DApp-Browser-in-imToken'
+const METAMASK_DOWNLOAD_URL = 'https://metamask.io/download/'
+const WALLETCONNECT_DOCS_URL = 'https://walletconnect.com/'
 const ZERO_EX_DASHBOARD_URL = 'https://dashboard.0x.org/apps'
 const ZERO_EX_NATIVE_ETH = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 const ZERO_EX_SELL_TOKEN_PRESETS = [
@@ -104,7 +111,7 @@ const MOBILE_TABS = [
   { id: 'chat', label: 'Chat' },
   { id: 'plan', label: 'Plan' },
   { id: 'tx', label: 'Tx' },
-  { id: 'dex', label: 'DEX' },
+  { id: 'dex', label: 'Swap' },
   { id: 'vault', label: 'Vaults' },
   { id: 'safety', label: 'Safety' },
 ] as const
@@ -259,6 +266,29 @@ function formatBaseUnits(amount: string, decimals: number, maxFractionDigits = 6
   return `${whole.toString()}${renderedFraction ? `.${renderedFraction}` : ''}`
 }
 
+type DemoBalanceAsset = keyof typeof MOCK_WALLET.balances
+
+function demoBalanceAssetForSymbol(symbol: string): DemoBalanceAsset | undefined {
+  if (symbol in MOCK_WALLET.balances) {
+    return symbol as DemoBalanceAsset
+  }
+  return undefined
+}
+
+function parsePositiveAmount(value: string) {
+  const amount = Number(value)
+  return Number.isFinite(amount) && amount > 0 ? amount : 0
+}
+
+function preferredProviderId(providers: WalletProviderOption[]) {
+  return (
+    providers.find((provider) => provider.isImToken)?.id ??
+    providers.find((provider) => provider.isMetaMask)?.id ??
+    providers[0]?.id ??
+    ''
+  )
+}
+
 function PufferPilotWorkspace() {
   const [snapshot, setSnapshot] = useState<PufferSnapshot | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -271,6 +301,8 @@ function PufferPilotWorkspace() {
   const [autoRefreshLiveData, setAutoRefreshLiveData] = useState(true)
   const [demoBalances, setDemoBalances] = useState(MOCK_WALLET.balances)
   const [walletAccounts, setWalletAccounts] = useState<`0x${string}`[]>([])
+  const [walletProviders, setWalletProviders] = useState<WalletProviderOption[]>([])
+  const [selectedWalletProviderId, setSelectedWalletProviderId] = useState('')
   const [walletChainId, setWalletChainId] = useState<number | undefined>()
   const [walletBalanceWei, setWalletBalanceWei] = useState<bigint | null>(null)
   const [walletBalanceChainId, setWalletBalanceChainId] = useState<number | undefined>()
@@ -291,6 +323,7 @@ function PufferPilotWorkspace() {
   )
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aggregatorApiKey, setAggregatorApiKey] = useState('')
+  const [exchangeAmountInput, setExchangeAmountInput] = useState('0.3')
   const [aggregatorSellToken, setAggregatorSellToken] = useState<ZeroExSellTokenPreset>(
     ZERO_EX_SELL_TOKEN_PRESETS[0],
   )
@@ -344,6 +377,15 @@ function PufferPilotWorkspace() {
     () => getPufferVaultContract(selectedNetworkId),
     [selectedNetworkId],
   )
+  const selectedWalletProvider = useMemo(
+    () =>
+      walletProviders.find((provider) => provider.id === selectedWalletProviderId) ??
+      walletProviders[0],
+    [walletProviders, selectedWalletProviderId],
+  )
+  const activeWalletProvider =
+    selectedWalletProvider?.provider ??
+    (typeof window === 'undefined' ? undefined : window.ethereum)
   const stakeAsset = getStakeAsset(effectiveIntent.asset)
   const usesPermit = stakeAsset === 'stETH' || stakeAsset === 'wstETH'
   const connectedAddress = appMode === 'demo' ? MOCK_WALLET.address : walletAccounts[0]
@@ -474,6 +516,7 @@ function PufferPilotWorkspace() {
   const selectedAggregatorDecimals = aggregatorSellToken.decimals
   const selectedAggregatorSellTokenAddress =
     aggregatorCustomToken.trim() || aggregatorSellToken.address
+  const exchangeAmount = parsePositiveAmount(exchangeAmountInput)
   const mobileGridClass = (tab: MobileTab) => (activeMobileTab === tab ? '' : '!hidden lg:!grid')
   const mobilePanelClass = (tab: MobileTab) => (activeMobileTab === tab ? '' : '!hidden lg:!flex')
 
@@ -485,7 +528,7 @@ function PufferPilotWorkspace() {
   }
 
   const refreshWalletSnapshot = async (accounts = walletAccounts) => {
-    if (!walletRuntime.hasProvider || !window.ethereum) {
+    if (!walletRuntime.hasProvider || !activeWalletProvider) {
       setWalletChainId(undefined)
       setWalletBalanceWei(null)
       setWalletBalanceChainId(undefined)
@@ -493,7 +536,7 @@ function PufferPilotWorkspace() {
       return
     }
 
-    const chainId = await readWalletChainId(window.ethereum)
+    const chainId = await readWalletChainId(activeWalletProvider)
     setWalletChainId(chainId)
 
     const walletAddress = accounts[0]
@@ -504,14 +547,14 @@ function PufferPilotWorkspace() {
       return
     }
 
-    const nativeBalance = await readNativeBalance(walletAddress, window.ethereum)
+    const nativeBalance = await readNativeBalance(walletAddress, activeWalletProvider)
     setWalletBalanceWei(nativeBalance ?? null)
     setWalletBalanceChainId(chainId)
 
     if (chainId === activeNetwork.chainId) {
       try {
         const pufEthBalance = await readSdkPufEthBalance({
-          provider: window.ethereum,
+          provider: activeWalletProvider,
           walletAddress,
           networkId: activeNetwork.id,
         })
@@ -525,15 +568,34 @@ function PufferPilotWorkspace() {
   }
 
   useEffect(() => {
-    setWalletRuntime(detectWalletRuntime())
+    discoverInjectedWalletProviders().then((providers) => {
+      setWalletProviders(providers)
+      setSelectedWalletProviderId((current) =>
+        providers.some((provider) => provider.id === current)
+          ? current
+          : preferredProviderId(providers),
+      )
+      setWalletRuntime(detectWalletRuntime(providers[0]?.provider))
+    })
   }, [])
 
   useEffect(() => {
-    if (appMode !== 'real' || !walletRuntime.hasProvider || !window.ethereum) {
+    const nextRuntime = detectWalletRuntime(activeWalletProvider)
+    setWalletRuntime(nextRuntime)
+  }, [activeWalletProvider])
+
+  useEffect(() => {
+    if (effectiveIntent.amount > 0) {
+      setExchangeAmountInput(String(effectiveIntent.amount))
+    }
+  }, [effectiveIntent.amount])
+
+  useEffect(() => {
+    if (appMode !== 'real' || !walletRuntime.hasProvider || !activeWalletProvider) {
       return
     }
 
-    requestPreviewOnlyAccounts(window.ethereum)
+    requestPreviewOnlyAccounts(activeWalletProvider)
       .then((accounts) => {
         setWalletAccounts(accounts)
         return refreshWalletSnapshot(accounts)
@@ -564,14 +626,14 @@ function PufferPilotWorkspace() {
       void refreshWalletSnapshot(walletAccounts)
     }
 
-    window.ethereum.on?.('accountsChanged', handleAccountsChanged)
-    window.ethereum.on?.('chainChanged', handleChainChanged)
+    activeWalletProvider.on?.('accountsChanged', handleAccountsChanged)
+    activeWalletProvider.on?.('chainChanged', handleChainChanged)
 
     return () => {
-      window.ethereum?.removeListener?.('accountsChanged', handleAccountsChanged)
-      window.ethereum?.removeListener?.('chainChanged', handleChainChanged)
+      activeWalletProvider.removeListener?.('accountsChanged', handleAccountsChanged)
+      activeWalletProvider.removeListener?.('chainChanged', handleChainChanged)
     }
-  }, [walletRuntime.hasProvider, appMode, activeNetwork.id])
+  }, [walletRuntime.hasProvider, appMode, activeNetwork.id, activeWalletProvider])
 
   const submitPrompt = () => {
     const nextIntent = parseIntent(prompt)
@@ -608,23 +670,29 @@ function PufferPilotWorkspace() {
       return
     }
 
-    const runtime = detectWalletRuntime()
+    const providers = await discoverInjectedWalletProviders()
+    setWalletProviders(providers)
+    if (!selectedWalletProviderId) {
+      setSelectedWalletProviderId(preferredProviderId(providers))
+    }
+    const provider = activeWalletProvider ?? providers[0]?.provider
+    const runtime = detectWalletRuntime(provider)
     setWalletRuntime(runtime)
-    if (!runtime.hasProvider || !window.ethereum) {
+    if (!runtime.hasProvider || !provider) {
       setTestnetStatus(
-        'No injected wallet detected. Open this URL in the imToken DApp Browser or another EIP-1193 wallet.',
+        'No injected wallet detected in this browser. Use imToken DApp Browser, MetaMask extension, Coinbase Wallet extension, or a mobile wallet browser. WalletConnect requires SDK setup.',
       )
       return
     }
 
     try {
       setIsWalletBusy(true)
-      const accounts = await requestWalletAccounts(window.ethereum)
+      const accounts = await requestWalletAccounts(provider)
       setWalletAccounts(accounts)
       await refreshWalletSnapshot(accounts)
       setTestnetStatus(
         accounts[0]
-          ? `Connected ${shortenAddress(accounts[0])}. Wallet prompts are gated by ${networkConfirmWord} confirmation.`
+          ? `Connected ${shortenAddress(accounts[0])} through ${selectedWalletProvider?.label ?? 'injected wallet'}. Wallet prompts are gated by ${networkConfirmWord} confirmation.`
           : 'Wallet returned no account.',
       )
     } catch (error) {
@@ -641,7 +709,7 @@ function PufferPilotWorkspace() {
       return
     }
 
-    if (!walletRuntime.hasProvider || !window.ethereum) {
+    if (!walletRuntime.hasProvider || !activeWalletProvider) {
       setTestnetStatus('No injected wallet detected. Open in imToken or another EIP-1193 wallet.')
       return
     }
@@ -654,6 +722,7 @@ function PufferPilotWorkspace() {
         rpcUrls: activeNetwork.rpcUrls,
         blockExplorerUrls: [activeNetwork.explorerUrl],
         nativeCurrency: activeNetwork.nativeCurrency,
+        provider: activeWalletProvider,
       })
       await refreshWalletSnapshot(walletAccounts)
       setTestnetStatus(`Wallet network switched to ${activeNetwork.label}.`)
@@ -684,7 +753,7 @@ function PufferPilotWorkspace() {
       )
       return
     }
-    if (!walletRuntime.hasProvider || !window.ethereum) {
+    if (!walletRuntime.hasProvider || !activeWalletProvider) {
       setTestnetStatus('No injected wallet provider is available for SDK gas estimate.')
       return
     }
@@ -693,7 +762,7 @@ function PufferPilotWorkspace() {
       setIsWalletBusy(true)
       let [walletAddress] = walletAccounts
       if (!walletAddress) {
-        const accounts = await requestWalletAccounts(window.ethereum)
+        const accounts = await requestWalletAccounts(activeWalletProvider)
         walletAddress = accounts[0]
         setWalletAccounts(accounts)
         await refreshWalletSnapshot(accounts)
@@ -709,15 +778,16 @@ function PufferPilotWorkspace() {
           rpcUrls: activeNetwork.rpcUrls,
           blockExplorerUrls: [activeNetwork.explorerUrl],
           nativeCurrency: activeNetwork.nativeCurrency,
+          provider: activeWalletProvider,
         })
         await refreshWalletSnapshot([walletAddress])
-        const chainId = await readWalletChainId(window.ethereum)
+        const chainId = await readWalletChainId(activeWalletProvider)
         if (chainId !== activeNetwork.chainId) {
           throw new Error(`Wallet must be on ${activeNetwork.label} before deposit.`)
         }
       }
       const gas = await estimateSdkStakeGas({
-        provider: window.ethereum,
+        provider: activeWalletProvider,
         walletAddress,
         networkId: activeNetwork.id,
         asset: stakeAsset,
@@ -781,7 +851,7 @@ function PufferPilotWorkspace() {
       setTestnetStatus(`Blocked: ${blockingSafetyChecks[0]?.label}.`)
       return
     }
-    if (!walletRuntime.hasProvider || !window.ethereum) {
+    if (!walletRuntime.hasProvider || !activeWalletProvider) {
       setTestnetStatus('No injected wallet provider is available for the transaction prompt.')
       return
     }
@@ -796,7 +866,7 @@ function PufferPilotWorkspace() {
       setIsWalletBusy(true)
       let [walletAddress] = walletAccounts
       if (!walletAddress) {
-        const accounts = await requestWalletAccounts(window.ethereum)
+        const accounts = await requestWalletAccounts(activeWalletProvider)
         walletAddress = accounts[0]
         setWalletAccounts(accounts)
         await refreshWalletSnapshot(accounts)
@@ -812,15 +882,16 @@ function PufferPilotWorkspace() {
           rpcUrls: activeNetwork.rpcUrls,
           blockExplorerUrls: [activeNetwork.explorerUrl],
           nativeCurrency: activeNetwork.nativeCurrency,
+          provider: activeWalletProvider,
         })
         await refreshWalletSnapshot([walletAddress])
-        const chainId = await readWalletChainId(window.ethereum)
+        const chainId = await readWalletChainId(activeWalletProvider)
         if (chainId !== activeNetwork.chainId) {
           throw new Error(`Wallet must be on ${activeNetwork.label} before deposit.`)
         }
       }
       const hash = await executeSdkStake({
-        provider: window.ethereum,
+        provider: activeWalletProvider,
         walletAddress,
         networkId: activeNetwork.id,
         amountEth: effectiveIntent.amount,
@@ -894,11 +965,11 @@ function PufferPilotWorkspace() {
 
   const requestDemoAggregatorQuote = () => {
     try {
-      const sellAmount = tokenAmountToBaseUnits(
-        effectiveIntent.amount || 1,
-        selectedAggregatorDecimals,
-      )
-      const quote = getDemoAggregatorQuote(selectedAggregatorSellTokenAddress, sellAmount)
+      const sellAmount = tokenAmountToBaseUnits(exchangeAmount || 1, selectedAggregatorDecimals)
+      const quote = getDemoAggregatorQuote(selectedAggregatorSellTokenAddress, sellAmount, {
+        sellTokenSymbol: aggregatorSellToken.symbol,
+        sellDecimals: selectedAggregatorDecimals,
+      })
       setAggregatorQuote(quote)
       setAggregatorStatus(
         'Demo 0x-style quote generated locally. No network or wallet call was made.',
@@ -924,10 +995,7 @@ function PufferPilotWorkspace() {
 
     try {
       setIsAggregatorBusy(true)
-      const sellAmount = tokenAmountToBaseUnits(
-        effectiveIntent.amount || 1,
-        selectedAggregatorDecimals,
-      )
+      const sellAmount = tokenAmountToBaseUnits(exchangeAmount || 1, selectedAggregatorDecimals)
       const quote = await getZeroExPufEthQuote({
         apiKey: aggregatorApiKey,
         taker: connectedAddress,
@@ -954,8 +1022,39 @@ function PufferPilotWorkspace() {
         requestDemoAggregatorQuote()
         return
       }
-      setTestnetStatus('Demo aggregator transaction completed locally. No broadcast or allowance.')
-      setAggregatorStatus('Demo aggregator route marked complete with local state only.')
+      const demoAsset = demoBalanceAssetForSymbol(aggregatorSellToken.symbol)
+      if (!demoAsset) {
+        setAggregatorStatus(
+          'Demo swap supports preset demo assets only. Use real mode for custom tokens.',
+        )
+        return
+      }
+      if (exchangeAmount <= 0) {
+        setAggregatorStatus('Enter a positive exchange amount before running the demo swap.')
+        return
+      }
+      if ((demoBalances[demoAsset] ?? 0) < exchangeAmount) {
+        setAggregatorStatus(
+          `Demo wallet only has ${formatNumber(demoBalances[demoAsset] ?? 0, 6)} ${aggregatorSellToken.symbol}.`,
+        )
+        return
+      }
+      const pufEthOutput = Number(formatBaseUnits(aggregatorQuote.buyAmountWei, 18, 8))
+      setDemoBalances((balances) => ({
+        ...balances,
+        [demoAsset]: Math.max((balances[demoAsset] ?? 0) - exchangeAmount, 0),
+        pufETH: balances.pufETH + pufEthOutput,
+      }))
+      const hash = makeDemoTxHash(
+        `swap-${aggregatorSellToken.symbol}-${exchangeAmount}-${Date.now()}`,
+      )
+      setTxHash(hash)
+      setTestnetStatus(
+        `Demo exchange completed locally: ${formatNumber(exchangeAmount, 6)} ${aggregatorSellToken.symbol} -> ~${formatNumber(pufEthOutput, 6)} pufETH.`,
+      )
+      setAggregatorStatus(
+        'Demo exchange updated local balances. No broadcast, approval, or wallet RPC.',
+      )
       return
     }
     if (!aggregatorQuote?.transaction) {
@@ -972,7 +1071,7 @@ function PufferPilotWorkspace() {
       setAggregatorStatus('Type MAINNET on Ethereum mainnet before sending the 0x transaction.')
       return
     }
-    if (!walletRuntime.hasProvider || !window.ethereum || !connectedAddress) {
+    if (!walletRuntime.hasProvider || !activeWalletProvider || !connectedAddress) {
       setAggregatorStatus(
         'No injected wallet provider is available for the aggregator transaction.',
       )
@@ -996,7 +1095,7 @@ function PufferPilotWorkspace() {
           gas: aggregatorQuote.transaction.gas,
           gasPrice: aggregatorQuote.transaction.gasPrice,
         },
-        window.ethereum,
+        activeWalletProvider,
       )
       setTxHash(hash)
       setAggregatorStatus(`Wallet accepted 0x pufETH transaction ${shortenAddress(hash)}.`)
@@ -1055,9 +1154,13 @@ function PufferPilotWorkspace() {
                 ? 'Funded demo wallet'
                 : walletRuntime.isImToken
                   ? 'imToken WebView'
-                  : walletRuntime.mode === 'injected'
-                    ? 'Injected wallet'
-                    : 'Mock wallet'}
+                  : walletRuntime.isMetaMask
+                    ? 'MetaMask'
+                    : walletRuntime.isCoinbaseWallet
+                      ? 'Coinbase Wallet'
+                      : walletRuntime.mode === 'injected'
+                        ? 'Injected wallet'
+                        : 'No wallet provider'}
             </Badge>
             <Button size="sm" variant="outline" onClick={refreshData}>
               <RefreshCw className="size-4" />
@@ -1412,7 +1515,7 @@ function PufferPilotWorkspace() {
 
           <div
             className={cn(
-              'grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,0.8fr)_minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,0.7fr)]',
+              'grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,0.55fr)_minmax(380px,1.45fr)_minmax(0,0.75fr)_minmax(0,0.45fr)]',
               activeMobileTab === 'tx' || activeMobileTab === 'dex' || activeMobileTab === 'safety'
                 ? ''
                 : '!hidden lg:!grid',
@@ -1422,7 +1525,7 @@ function PufferPilotWorkspace() {
               title="Safety Checklist"
               subtitle={safetyDecision.decision.replaceAll('_', ' ')}
               icon={<LockKeyhole className="size-4" />}
-              className={mobilePanelClass('safety')}
+              className={cn('lg:order-1', mobilePanelClass('safety'))}
             >
               <div className="space-y-2">
                 {safetyDecision.redactions.length ? (
@@ -1459,7 +1562,7 @@ function PufferPilotWorkspace() {
               title="Transaction Preview"
               subtitle={`${activeNetwork.label} ${stakeAsset} to pufETH with imToken-compatible wallet prompts`}
               icon={<CircleDollarSign className="size-4" />}
-              className={mobilePanelClass('tx')}
+              className={cn('lg:order-3', mobilePanelClass('tx'))}
             >
               <div className="space-y-3">
                 {blockingSafetyChecks.length ? (
@@ -1488,6 +1591,110 @@ function PufferPilotWorkspace() {
                   value={`${activeNetwork.label} (${activeNetwork.chainId})`}
                 />
                 <MetricRow label="Wallet chain" value={walletChain} />
+                <div className="rounded-md border border-border bg-card px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-caption font-semibold">Wallet connection</div>
+                      <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                        Browser wallets appear only when they inject an EIP-1193 provider into this
+                        page.
+                      </div>
+                    </div>
+                    <Badge variant={walletRuntime.hasProvider ? 'success' : 'warning'}>
+                      {walletProviders.length
+                        ? `${walletProviders.length} provider${walletProviders.length > 1 ? 's' : ''}`
+                        : 'No provider'}
+                    </Badge>
+                  </div>
+                  {walletProviders.length ? (
+                    <div className="mt-3 grid gap-2">
+                      {walletProviders.map((provider) => (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedWalletProviderId(provider.id)
+                            setWalletAccounts([])
+                            setWalletBalanceWei(null)
+                            setPufEthBalanceWei(null)
+                            setWalletRuntime(detectWalletRuntime(provider.provider))
+                            setTestnetStatus(
+                              `Selected ${provider.label}. Click Connect to request accounts.`,
+                            )
+                          }}
+                          className={cn(
+                            'flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-caption transition-colors',
+                            selectedWalletProvider?.id === provider.id
+                              ? 'border-primary bg-surface-blue text-primary'
+                              : 'border-border bg-background text-foreground hover:bg-accent',
+                          )}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <PlugZap className="size-4 shrink-0" />
+                            <span className="truncate font-semibold">{provider.label}</span>
+                          </span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {provider.source === 'eip6963' ? 'EIP-6963' : 'Injected'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid gap-2 text-[11px] leading-4 text-muted-foreground">
+                      <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-warning-text">
+                        Codex / normal in-app browsers usually do not include MetaMask or imToken
+                        injection. Open this URL in imToken DApp Browser, MetaMask mobile browser,
+                        or desktop Chrome with the MetaMask extension installed.
+                      </div>
+                      <div className="rounded-md border border-border bg-background px-3 py-2">
+                        WalletConnect is not bundled in this build because it requires a dedicated
+                        SDK and Reown/WalletConnect project ID. This panel keeps that boundary
+                        explicit instead of pretending QR connect exists.
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={connectWalletForTestnet}>
+                      <Wallet className="size-4" />
+                      Connect selected
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        discoverInjectedWalletProviders().then((providers) => {
+                          setWalletProviders(providers)
+                          setSelectedWalletProviderId((current) =>
+                            providers.some((provider) => provider.id === current)
+                              ? current
+                              : preferredProviderId(providers),
+                          )
+                          setWalletRuntime(detectWalletRuntime(providers[0]?.provider))
+                          setTestnetStatus(
+                            providers.length
+                              ? `Detected ${providers.length} injected wallet provider${providers.length > 1 ? 's' : ''}.`
+                              : 'No injected wallet provider detected in this browser.',
+                          )
+                        })
+                      }}
+                    >
+                      <RefreshCw className="size-4" />
+                      Detect wallets
+                    </Button>
+                    <Button asChild variant="outline" size="sm">
+                      <a href={METAMASK_DOWNLOAD_URL} target="_blank" rel="noreferrer">
+                        <ExternalLink className="size-4" />
+                        MetaMask
+                      </a>
+                    </Button>
+                    <Button asChild variant="outline" size="sm">
+                      <a href={WALLETCONNECT_DOCS_URL} target="_blank" rel="noreferrer">
+                        <Cable className="size-4" />
+                        WalletConnect
+                      </a>
+                    </Button>
+                  </div>
+                </div>
                 <MetricRow
                   label="Connected wallet"
                   value={connectedAddress ? shortenAddress(connectedAddress) : 'Not connected'}
@@ -1496,9 +1703,13 @@ function PufferPilotWorkspace() {
                       ? 'Funded mock wallet, no provider access'
                       : walletRuntime.isImToken
                         ? 'imToken injected provider'
-                        : walletRuntime.hasProvider
-                          ? 'EIP-1193 injected provider'
-                          : 'No injected provider'
+                        : walletRuntime.isMetaMask
+                          ? 'MetaMask injected provider'
+                          : walletRuntime.isCoinbaseWallet
+                            ? 'Coinbase Wallet injected provider'
+                            : walletRuntime.hasProvider
+                              ? 'EIP-1193 injected provider'
+                              : 'No injected provider'
                   }
                 />
                 <MetricRow
@@ -1716,15 +1927,73 @@ function PufferPilotWorkspace() {
             </Panel>
 
             <Panel
-              title="DEX Aggregator"
-              subtitle="Advanced: any token to pufETH through 0x"
-              icon={<ArrowRight className="size-4" />}
-              className={mobilePanelClass('dex')}
+              title="Exchange"
+              subtitle="Advanced route: any token to pufETH through 0x"
+              icon={<Repeat2 className="size-4" />}
+              className={cn('lg:order-2', mobilePanelClass('dex'))}
             >
               <div className="space-y-3">
+                <div className="rounded-xl border border-primary bg-surface-blue p-2">
+                  <div className="grid gap-2">
+                    <div className="rounded-lg border border-border bg-background px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-caption font-semibold text-muted-foreground">
+                          From
+                        </span>
+                        <Badge variant={appMode === 'demo' ? 'success' : 'warning'}>
+                          {appMode === 'demo' ? 'Local demo balance' : 'Real wallet balance'}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                        <Input
+                          value={exchangeAmountInput}
+                          onChange={(event) => {
+                            setExchangeAmountInput(event.target.value)
+                            setAggregatorQuote(null)
+                          }}
+                          aria-label="Exchange sell amount"
+                          inputMode="decimal"
+                          placeholder="0.3"
+                          className="h-10 bg-background text-title-sm font-semibold"
+                        />
+                        <Badge variant="primary">{aggregatorSellToken.symbol}</Badge>
+                      </div>
+                      {appMode === 'demo' ? (
+                        <div className="mt-2 text-[11px] text-muted-foreground">
+                          Available:{' '}
+                          {formatNumber(
+                            demoBalances[
+                              demoBalanceAssetForSymbol(aggregatorSellToken.symbol) ?? 'ETH'
+                            ] ?? 0,
+                            aggregatorSellToken.decimals === 6 ? 2 : 6,
+                          )}{' '}
+                          {aggregatorSellToken.symbol}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex justify-center">
+                      <div className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-cta-sm)]">
+                        <ArrowRight className="size-4 rotate-90" />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-success-border bg-success-surface px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-caption font-semibold text-success-text">To</span>
+                        <Badge variant="success">pufETH</Badge>
+                      </div>
+                      <div className="mt-2 text-title-sm font-bold text-success-text">
+                        {aggregatorBuyAmountLabel}
+                      </div>
+                      <div className="mt-1 text-[11px] text-success-text">
+                        Route: {aggregatorSellToken.symbol} {'->'} 0x AllowanceHolder {'->'} pufETH
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div className="rounded-md border border-border bg-card px-3 py-2 text-caption text-muted-foreground">
-                  Demo quotes are local. Real 0x quotes use your own API key in this browser
-                  session, target Ethereum mainnet pufETH, and never ask for seed phrases.
+                  Demo exchange is local and updates demo balances. Real 0x quotes use your own API
+                  key in this browser session, target Ethereum mainnet pufETH, and never ask for
+                  seed phrases.
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {ZERO_EX_SELL_TOKEN_PRESETS.map((token) => (
@@ -1764,7 +2033,7 @@ function PufferPilotWorkspace() {
                 <MetricRow
                   label="Sell amount"
                   value={aggregatorSellAmountLabel}
-                  detail={`${effectiveIntent.amount || 1} user units, ${selectedAggregatorDecimals} decimals`}
+                  detail={`${exchangeAmount || 1} user units, ${selectedAggregatorDecimals} decimals`}
                 />
                 <MetricRow
                   label="Expected pufETH"
@@ -1824,7 +2093,7 @@ function PufferPilotWorkspace() {
               title="Local Learning"
               subtitle={`${preferenceModel.events.length} feedback events stored locally`}
               icon={<Sparkles className="size-4" />}
-              className={mobilePanelClass('safety')}
+              className={cn('lg:order-4', mobilePanelClass('safety'))}
             >
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">

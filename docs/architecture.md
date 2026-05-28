@@ -20,13 +20,16 @@ security boundaries explicit.
 8. `zeroex-aggregator.ts` supports optional user-key 0x quotes for any-token-to-pufETH.
 9. `ranker.ts` applies local preference weights only to policy-allowed candidates.
 10. `pufferpilot-workspace.tsx` renders dashboard, mode selector, agent plan, safety checklist,
-    transaction preview, DEX panel, vault scanner, optional AI, and feedback controls.
+    transaction preview, Exchange panel, vault scanner, optional AI, and feedback controls.
 
 ## Mode Contract
 
 - Demo Mode never touches `window.ethereum`. It uses `MOCK_WALLET`, local balances, fake tx hashes,
   local SDK estimates, and local 0x-style quotes.
 - Real Wallet Mode is the only mode that calls wallet RPCs, Puffer SDK write helpers, or 0x.
+- Real Wallet Mode can use imToken, MetaMask, or another injected EIP-1193/EIP-6963 provider.
+  WalletConnect QR/session support is intentionally not bundled until a WalletConnect/Reown SDK and
+  project ID are added.
 - Optional AI is off by default. The deterministic planner and policy engine are always primary.
 
 ## Data Contract

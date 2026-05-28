@@ -13,8 +13,9 @@ PufferPilot has two explicit modes:
 
 - **Demo Mode**: fully local, funded mock wallet, executable demo stake and demo aggregator actions,
   no wallet RPCs and no broadcast.
-- **Real Wallet Mode**: connects imToken or any EIP-1193 injected wallet, reads balances, switches
-  Holesky/mainnet, estimates and requests Puffer SDK wallet prompts only after typed confirmation.
+- **Real Wallet Mode**: detects injected imToken/MetaMask/EIP-6963 wallets, lets users choose the
+  provider, reads balances, switches Holesky/mainnet, estimates and requests Puffer SDK wallet
+  prompts only after typed confirmation.
 
 ## What Is Built
 
@@ -28,10 +29,11 @@ PufferPilot has two explicit modes:
   approval warning, Permit gate, gas buffer, Holesky testnet scope, and mainnet confirmation gate.
 - Transaction preview: expected pufETH output, route, contract address, approval requirement, gas
   statement, network state, and broadcast boundary.
-- imToken wallet operation: EIP-1193 provider detection, imToken WebView badge, wallet account,
-  chain, native balance, Holesky/mainnet switch helper, pufETH balance read, SDK gas estimate, and
-  guarded `PufferVault.depositETH` / `PufferDepositor.depositStETH` /
+- imToken wallet operation: EIP-1193 and EIP-6963 provider detection, imToken/MetaMask provider
+  selector, wallet account, chain, native balance, Holesky/mainnet switch helper, pufETH balance
+  read, SDK gas estimate, and guarded `PufferVault.depositETH` / `PufferDepositor.depositStETH` /
   `PufferDepositor.depositWstETH` wallet prompts.
+- Exchange area: dedicated From/To swap panel with demo balance updates and optional 0x quote.
 - Advanced DEX aggregator: optional 0x quote with user-supplied API key for any-token-to-pufETH
   transaction preview, exact allowance warning, and guarded mainnet wallet send.
 - Local preference learning: explicit feedback changes future ranking for safe candidates only.
@@ -69,14 +71,15 @@ https://www.token.im/download
 3. Click `Plan`.
 4. In `Transaction Preview`, click `Demo wallet`, `SDK estimate`, then `Run demo ETH stake`.
 5. The local pufETH balance updates without wallet RPCs, gas, approvals, or broadcast.
-6. In `DEX Aggregator`, click `Demo quote`, then `Run demo swap`.
+6. In `Exchange`, click `Demo quote`, then `Run demo swap`.
 
 ### Real Wallet Mode
 
 1. Open the site inside imToken DApp Browser or click `Open imToken`.
 2. Select `Real Wallet Mode`.
 3. Select `Holesky` for testnet or `Mainnet` for real Puffer contracts.
-4. Click `Connect`, then `Switch Holesky` or `Switch Mainnet`.
+4. Choose the detected provider, click `Connect selected`, then `Switch Holesky` or
+   `Switch Mainnet`.
 5. Use an ETH, stETH, or wstETH intent.
 6. Click `SDK estimate`.
 7. Type `HOLESKY` or `MAINNET`. For stETH/wstETH, also type `PERMIT`.
@@ -86,7 +89,7 @@ https://www.token.im/download
 
 1. Select `Real Wallet Mode` and `Mainnet`.
 2. Connect wallet and type `MAINNET` in the transaction panel.
-3. In `DEX Aggregator`, paste your own 0x API key.
+3. In `Exchange`, paste your own 0x API key.
 4. Choose or paste a sell token address.
 5. Click `Real 0x quote`.
 6. If exact allowance is already available, `Send 0x tx` asks the wallet to send the aggregator
@@ -95,6 +98,15 @@ https://www.token.im/download
 
 The app does not request `personal_sign` or `eth_sign`. `eth_signTypedData` is only reachable for
 stETH/wstETH Permit routes after the user types `PERMIT`.
+
+### Why A Wallet May Not Connect
+
+Real Wallet Mode needs a wallet provider injected into the page. In a normal browser without an
+extension, and in the Codex in-app browser, `window.ethereum` is usually absent, so no wallet can
+answer `eth_requestAccounts`. imToken works when the page is opened inside the imToken DApp
+Browser. MetaMask works in MetaMask Mobile Browser or desktop Chrome/Brave with the MetaMask
+extension installed. WalletConnect is shown as an explicit setup boundary because a real QR/session
+flow requires adding a WalletConnect/Reown SDK and project ID; this repo does not fake QR connect.
 
 ## Safety Boundary
 
