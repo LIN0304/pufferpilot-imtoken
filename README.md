@@ -33,7 +33,8 @@ PufferPilot has two explicit modes:
   selector, wallet account, chain, native balance, Holesky/mainnet switch helper, pufETH balance
   read, SDK gas estimate, and guarded `PufferVault.depositETH` / `PufferDepositor.depositStETH` /
   `PufferDepositor.depositWstETH` wallet prompts.
-- Exchange area: dedicated From/To swap panel with demo balance updates and optional 0x quote.
+- Exchange area: Puffer-style central From/To console with ETH, WETH, stETH, wstETH, LST/LRT,
+  stablecoin, and WBTC presets, demo balance updates, and optional 0x quote.
 - Advanced DEX aggregator: optional 0x quote with user-supplied API key for any-token-to-pufETH
   transaction preview, exact allowance warning, and guarded mainnet wallet send.
 - Local preference learning: explicit feedback changes future ranking for safe candidates only.
@@ -69,17 +70,19 @@ https://www.token.im/download
 1. Keep `Demo Mode` selected.
 2. Enter an intent such as `我有 0.3 ETH，想低風險參與 Puffer`.
 3. Click `Plan`.
-4. In `Transaction Preview`, click `Demo wallet`, `SDK estimate`, then `Run demo ETH stake`.
-5. The local pufETH balance updates without wallet RPCs, gas, approvals, or broadcast.
-6. In `Exchange`, click `Demo quote`, then `Run demo swap`.
+4. In the central `Stake / Exchange` console, choose any preset asset, click `Demo quote`, then
+   `Run demo swap`.
+5. In `Transaction Preview`, click `Demo wallet`, `SDK estimate`, then `Run demo ETH stake`.
+6. The local pufETH balance updates without wallet RPCs, gas, approvals, or broadcast.
 
 ### Real Wallet Mode
 
 1. Open the site inside imToken DApp Browser or click `Open imToken`.
 2. Select `Real Wallet Mode`.
 3. Select `Holesky` for testnet or `Mainnet` for real Puffer contracts.
-4. Choose the detected provider, click `Connect selected`, then `Switch Holesky` or
-   `Switch Mainnet`.
+4. Click the header `Connect Wallet` button or choose the detected provider and click
+   `Connect selected`; the app now calls `eth_requestAccounts` directly on the selected injected
+   provider from the click path. Then click `Switch Holesky` or `Switch Mainnet`.
 5. Use an ETH, stETH, or wstETH intent.
 6. Click `SDK estimate`.
 7. Type `HOLESKY` or `MAINNET`. For stETH/wstETH, also type `PERMIT`.
@@ -90,7 +93,8 @@ https://www.token.im/download
 1. Select `Real Wallet Mode` and `Mainnet`.
 2. Connect wallet and type `MAINNET` in the transaction panel.
 3. In `Exchange`, paste your own 0x API key.
-4. Choose or paste a sell token address.
+4. Choose ETH/WETH/stETH/wstETH, LST/LRT assets such as rETH/cbETH/weETH/ezETH, stablecoins, WBTC,
+   or paste a sell token address.
 5. Click `Real 0x quote`.
 6. If exact allowance is already available, `Send 0x tx` asks the wallet to send the aggregator
    transaction. If allowance is missing, the UI blocks and tells the user to approve the exact

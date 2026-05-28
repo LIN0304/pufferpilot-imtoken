@@ -20,7 +20,6 @@ import {
   Gauge,
   KeyRound,
   LockKeyhole,
-  MessageSquareText,
   PlugZap,
   RefreshCw,
   Repeat2,
@@ -79,6 +78,7 @@ import { formatNumber, formatPercent, formatUsd, shortenAddress } from '../../li
 import {
   detectWalletRuntime,
   discoverInjectedWalletProviders,
+  type EthereumProviderLike,
   formatWeiToEth,
   parseChainId,
   readNativeBalance,
@@ -101,11 +101,111 @@ const WALLETCONNECT_DOCS_URL = 'https://walletconnect.com/'
 const ZERO_EX_DASHBOARD_URL = 'https://dashboard.0x.org/apps'
 const ZERO_EX_NATIVE_ETH = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 const ZERO_EX_SELL_TOKEN_PRESETS = [
-  { symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18 },
-  { symbol: 'stETH', address: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', decimals: 18 },
-  { symbol: 'wstETH', address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0', decimals: 18 },
-  { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6 },
-  { symbol: 'ETH', address: ZERO_EX_NATIVE_ETH, decimals: 18 },
+  {
+    symbol: 'ETH',
+    name: 'Ethereum',
+    category: 'Native',
+    address: ZERO_EX_NATIVE_ETH,
+    decimals: 18,
+  },
+  {
+    symbol: 'WETH',
+    name: 'Wrapped Ether',
+    category: 'Core',
+    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    decimals: 18,
+  },
+  {
+    symbol: 'stETH',
+    name: 'Lido Staked ETH',
+    category: 'LST',
+    address: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
+    decimals: 18,
+  },
+  {
+    symbol: 'wstETH',
+    name: 'Wrapped stETH',
+    category: 'LST',
+    address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0',
+    decimals: 18,
+  },
+  {
+    symbol: 'rETH',
+    name: 'Rocket Pool ETH',
+    category: 'LST',
+    address: '0xae78736Cd615f374D3085123A210448E74Fc6393',
+    decimals: 18,
+  },
+  {
+    symbol: 'cbETH',
+    name: 'Coinbase Wrapped Staked ETH',
+    category: 'LST',
+    address: '0xBe9895146f7AF43049ca1c1AE358B0541Ea49704',
+    decimals: 18,
+  },
+  {
+    symbol: 'swETH',
+    name: 'Swell ETH',
+    category: 'LST',
+    address: '0xf951E335afb289353dc249e82926178EaC7DEd78',
+    decimals: 18,
+  },
+  {
+    symbol: 'osETH',
+    name: 'StakeWise osETH',
+    category: 'LST',
+    address: '0xf1C9acDC66974dFb6DEcb12Aa385b9CD01190E38',
+    decimals: 18,
+  },
+  {
+    symbol: 'weETH',
+    name: 'Ether.fi weETH',
+    category: 'LRT',
+    address: '0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee',
+    decimals: 18,
+  },
+  {
+    symbol: 'ezETH',
+    name: 'Renzo ezETH',
+    category: 'LRT',
+    address: '0xbf5495Efe5DB9ce00f80364C8B423567e58d2110',
+    decimals: 18,
+  },
+  {
+    symbol: 'sfrxETH',
+    name: 'Frax sfrxETH',
+    category: 'LST',
+    address: '0xac3E018457B222d93114458476f3E3416Abbe38F',
+    decimals: 18,
+  },
+  {
+    symbol: 'USDC',
+    name: 'USD Coin',
+    category: 'Stable',
+    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    decimals: 6,
+  },
+  {
+    symbol: 'USDT',
+    name: 'Tether USD',
+    category: 'Stable',
+    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    decimals: 6,
+  },
+  {
+    symbol: 'DAI',
+    name: 'Dai Stablecoin',
+    category: 'Stable',
+    address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+    decimals: 18,
+  },
+  {
+    symbol: 'WBTC',
+    name: 'Wrapped Bitcoin',
+    category: 'BTC',
+    address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+    decimals: 8,
+  },
 ] as const
 const MOBILE_TABS = [
   { id: 'chat', label: 'Chat' },
@@ -289,6 +389,45 @@ function preferredProviderId(providers: WalletProviderOption[]) {
   )
 }
 
+function fallbackWalletProviderOption(
+  provider: EthereumProviderLike | undefined,
+): WalletProviderOption | undefined {
+  if (!provider) {
+    return undefined
+  }
+
+  const runtime = detectWalletRuntime(provider)
+  const label = runtime.isImToken
+    ? 'imToken'
+    : runtime.isMetaMask
+      ? 'MetaMask'
+      : runtime.isCoinbaseWallet
+        ? 'Coinbase Wallet'
+        : 'Injected wallet'
+
+  return {
+    id: `window:${label}`,
+    label,
+    isImToken: runtime.isImToken,
+    isMetaMask: runtime.isMetaMask,
+    isCoinbaseWallet: runtime.isCoinbaseWallet,
+    source: 'injected',
+    provider,
+  }
+}
+
+function chooseWalletProviderOption(
+  providers: WalletProviderOption[],
+  selectedProviderId: string,
+): WalletProviderOption | undefined {
+  return (
+    providers.find((provider) => provider.id === selectedProviderId) ??
+    providers.find((provider) => provider.isImToken) ??
+    providers.find((provider) => provider.isMetaMask) ??
+    providers[0]
+  )
+}
+
 function PufferPilotWorkspace() {
   const [snapshot, setSnapshot] = useState<PufferSnapshot | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -379,13 +518,14 @@ function PufferPilotWorkspace() {
   )
   const selectedWalletProvider = useMemo(
     () =>
-      walletProviders.find((provider) => provider.id === selectedWalletProviderId) ??
-      walletProviders[0],
+      chooseWalletProviderOption(walletProviders, selectedWalletProviderId) ??
+      fallbackWalletProviderOption(typeof window === 'undefined' ? undefined : window.ethereum),
     [walletProviders, selectedWalletProviderId],
   )
-  const activeWalletProvider =
-    selectedWalletProvider?.provider ??
-    (typeof window === 'undefined' ? undefined : window.ethereum)
+  const resolveActiveWalletOption = (providers = walletProviders) =>
+    chooseWalletProviderOption(providers, selectedWalletProviderId) ??
+    fallbackWalletProviderOption(typeof window === 'undefined' ? undefined : window.ethereum)
+  const activeWalletProvider = selectedWalletProvider?.provider
   const stakeAsset = getStakeAsset(effectiveIntent.asset)
   const usesPermit = stakeAsset === 'stETH' || stakeAsset === 'wstETH'
   const connectedAddress = appMode === 'demo' ? MOCK_WALLET.address : walletAccounts[0]
@@ -527,8 +667,12 @@ function PufferPilotWorkspace() {
     setIsLoading(false)
   }
 
-  const refreshWalletSnapshot = async (accounts = walletAccounts) => {
-    if (!walletRuntime.hasProvider || !activeWalletProvider) {
+  const refreshWalletSnapshot = async (
+    accounts = walletAccounts,
+    providerOverride?: EthereumProviderLike,
+  ) => {
+    const provider = providerOverride ?? resolveActiveWalletOption()?.provider
+    if (!provider) {
       setWalletChainId(undefined)
       setWalletBalanceWei(null)
       setWalletBalanceChainId(undefined)
@@ -536,7 +680,7 @@ function PufferPilotWorkspace() {
       return
     }
 
-    const chainId = await readWalletChainId(activeWalletProvider)
+    const chainId = await readWalletChainId(provider)
     setWalletChainId(chainId)
 
     const walletAddress = accounts[0]
@@ -547,14 +691,14 @@ function PufferPilotWorkspace() {
       return
     }
 
-    const nativeBalance = await readNativeBalance(walletAddress, activeWalletProvider)
+    const nativeBalance = await readNativeBalance(walletAddress, provider)
     setWalletBalanceWei(nativeBalance ?? null)
     setWalletBalanceChainId(chainId)
 
     if (chainId === activeNetwork.chainId) {
       try {
         const pufEthBalance = await readSdkPufEthBalance({
-          provider: activeWalletProvider,
+          provider,
           walletAddress,
           networkId: activeNetwork.id,
         })
@@ -598,9 +742,9 @@ function PufferPilotWorkspace() {
     requestPreviewOnlyAccounts(activeWalletProvider)
       .then((accounts) => {
         setWalletAccounts(accounts)
-        return refreshWalletSnapshot(accounts)
+        return refreshWalletSnapshot(accounts, activeWalletProvider)
       })
-      .catch(() => refreshWalletSnapshot([]))
+      .catch(() => refreshWalletSnapshot([], activeWalletProvider))
 
     const handleAccountsChanged = (payload: unknown) => {
       const accounts = Array.isArray(payload)
@@ -614,7 +758,7 @@ function PufferPilotWorkspace() {
           ? `Wallet account changed to ${shortenAddress(accounts[0])}.`
           : 'Wallet disconnected.',
       )
-      void refreshWalletSnapshot(accounts)
+      void refreshWalletSnapshot(accounts, activeWalletProvider)
     }
 
     const handleChainChanged = (payload: unknown) => {
@@ -623,7 +767,7 @@ function PufferPilotWorkspace() {
       setSdkGasEstimate(null)
       setTxHash(null)
       setTestnetStatus(`Wallet network changed to ${walletChainLabel(nextChainId)}.`)
-      void refreshWalletSnapshot(walletAccounts)
+      void refreshWalletSnapshot(walletAccounts, activeWalletProvider)
     }
 
     activeWalletProvider.on?.('accountsChanged', handleAccountsChanged)
@@ -670,12 +814,17 @@ function PufferPilotWorkspace() {
       return
     }
 
-    const providers = await discoverInjectedWalletProviders()
-    setWalletProviders(providers)
-    if (!selectedWalletProviderId) {
-      setSelectedWalletProviderId(preferredProviderId(providers))
+    const immediateOption = resolveActiveWalletOption()
+    let walletOption = immediateOption
+    let providers = walletProviders
+
+    if (!walletOption) {
+      providers = await discoverInjectedWalletProviders()
+      setWalletProviders(providers)
+      walletOption = resolveActiveWalletOption(providers)
     }
-    const provider = activeWalletProvider ?? providers[0]?.provider
+
+    const provider = walletOption?.provider
     const runtime = detectWalletRuntime(provider)
     setWalletRuntime(runtime)
     if (!runtime.hasProvider || !provider) {
@@ -684,15 +833,18 @@ function PufferPilotWorkspace() {
       )
       return
     }
+    if (walletOption?.id && selectedWalletProviderId !== walletOption.id) {
+      setSelectedWalletProviderId(walletOption.id)
+    }
 
     try {
       setIsWalletBusy(true)
       const accounts = await requestWalletAccounts(provider)
       setWalletAccounts(accounts)
-      await refreshWalletSnapshot(accounts)
+      await refreshWalletSnapshot(accounts, provider)
       setTestnetStatus(
         accounts[0]
-          ? `Connected ${shortenAddress(accounts[0])} through ${selectedWalletProvider?.label ?? 'injected wallet'}. Wallet prompts are gated by ${networkConfirmWord} confirmation.`
+          ? `Connected ${shortenAddress(accounts[0])} through ${walletOption?.label ?? 'injected wallet'}. Wallet prompts are gated by ${networkConfirmWord} confirmation.`
           : 'Wallet returned no account.',
       )
     } catch (error) {
@@ -709,7 +861,8 @@ function PufferPilotWorkspace() {
       return
     }
 
-    if (!walletRuntime.hasProvider || !activeWalletProvider) {
+    const provider = resolveActiveWalletOption()?.provider
+    if (!provider) {
       setTestnetStatus('No injected wallet detected. Open in imToken or another EIP-1193 wallet.')
       return
     }
@@ -722,9 +875,9 @@ function PufferPilotWorkspace() {
         rpcUrls: activeNetwork.rpcUrls,
         blockExplorerUrls: [activeNetwork.explorerUrl],
         nativeCurrency: activeNetwork.nativeCurrency,
-        provider: activeWalletProvider,
+        provider,
       })
-      await refreshWalletSnapshot(walletAccounts)
+      await refreshWalletSnapshot(walletAccounts, provider)
       setTestnetStatus(`Wallet network switched to ${activeNetwork.label}.`)
     } catch (error) {
       setTestnetStatus(error instanceof Error ? error.message : 'Network switch was cancelled.')
@@ -753,7 +906,8 @@ function PufferPilotWorkspace() {
       )
       return
     }
-    if (!walletRuntime.hasProvider || !activeWalletProvider) {
+    const provider = resolveActiveWalletOption()?.provider
+    if (!provider) {
       setTestnetStatus('No injected wallet provider is available for SDK gas estimate.')
       return
     }
@@ -762,10 +916,10 @@ function PufferPilotWorkspace() {
       setIsWalletBusy(true)
       let [walletAddress] = walletAccounts
       if (!walletAddress) {
-        const accounts = await requestWalletAccounts(activeWalletProvider)
+        const accounts = await requestWalletAccounts(provider)
         walletAddress = accounts[0]
         setWalletAccounts(accounts)
-        await refreshWalletSnapshot(accounts)
+        await refreshWalletSnapshot(accounts, provider)
       }
       if (!walletAddress) {
         setTestnetStatus('No wallet account selected.')
@@ -778,16 +932,16 @@ function PufferPilotWorkspace() {
           rpcUrls: activeNetwork.rpcUrls,
           blockExplorerUrls: [activeNetwork.explorerUrl],
           nativeCurrency: activeNetwork.nativeCurrency,
-          provider: activeWalletProvider,
+          provider,
         })
-        await refreshWalletSnapshot([walletAddress])
-        const chainId = await readWalletChainId(activeWalletProvider)
+        await refreshWalletSnapshot([walletAddress], provider)
+        const chainId = await readWalletChainId(provider)
         if (chainId !== activeNetwork.chainId) {
           throw new Error(`Wallet must be on ${activeNetwork.label} before deposit.`)
         }
       }
       const gas = await estimateSdkStakeGas({
-        provider: activeWalletProvider,
+        provider,
         walletAddress,
         networkId: activeNetwork.id,
         asset: stakeAsset,
@@ -795,7 +949,7 @@ function PufferPilotWorkspace() {
         allowMainnet: !activeNetwork.isTestnet && realExecutionConfirmed,
       })
       setSdkGasEstimate(gas)
-      await refreshWalletSnapshot([walletAddress])
+      await refreshWalletSnapshot([walletAddress], provider)
       setTestnetStatus(
         `Puffer SDK ${activeNetwork.label} estimate returned ${gas} gas units. Wallet will show final fee before any transaction.`,
       )
@@ -851,7 +1005,8 @@ function PufferPilotWorkspace() {
       setTestnetStatus(`Blocked: ${blockingSafetyChecks[0]?.label}.`)
       return
     }
-    if (!walletRuntime.hasProvider || !activeWalletProvider) {
+    const provider = resolveActiveWalletOption()?.provider
+    if (!provider) {
       setTestnetStatus('No injected wallet provider is available for the transaction prompt.')
       return
     }
@@ -866,10 +1021,10 @@ function PufferPilotWorkspace() {
       setIsWalletBusy(true)
       let [walletAddress] = walletAccounts
       if (!walletAddress) {
-        const accounts = await requestWalletAccounts(activeWalletProvider)
+        const accounts = await requestWalletAccounts(provider)
         walletAddress = accounts[0]
         setWalletAccounts(accounts)
-        await refreshWalletSnapshot(accounts)
+        await refreshWalletSnapshot(accounts, provider)
       }
       if (!walletAddress) {
         setTestnetStatus('No wallet account selected.')
@@ -882,16 +1037,16 @@ function PufferPilotWorkspace() {
           rpcUrls: activeNetwork.rpcUrls,
           blockExplorerUrls: [activeNetwork.explorerUrl],
           nativeCurrency: activeNetwork.nativeCurrency,
-          provider: activeWalletProvider,
+          provider,
         })
-        await refreshWalletSnapshot([walletAddress])
-        const chainId = await readWalletChainId(activeWalletProvider)
+        await refreshWalletSnapshot([walletAddress], provider)
+        const chainId = await readWalletChainId(provider)
         if (chainId !== activeNetwork.chainId) {
           throw new Error(`Wallet must be on ${activeNetwork.label} before deposit.`)
         }
       }
       const hash = await executeSdkStake({
-        provider: activeWalletProvider,
+        provider,
         walletAddress,
         networkId: activeNetwork.id,
         amountEth: effectiveIntent.amount,
@@ -902,7 +1057,7 @@ function PufferPilotWorkspace() {
       setTestnetStatus(
         `Wallet accepted ${activeNetwork.label} ${stakeAsset} deposit transaction ${shortenAddress(hash)}. Track it on the explorer.`,
       )
-      await refreshWalletSnapshot([walletAddress])
+      await refreshWalletSnapshot([walletAddress], provider)
     } catch (error) {
       setTestnetStatus(error instanceof Error ? error.message : 'Wallet transaction was rejected.')
     } finally {
@@ -1071,7 +1226,8 @@ function PufferPilotWorkspace() {
       setAggregatorStatus('Type MAINNET on Ethereum mainnet before sending the 0x transaction.')
       return
     }
-    if (!walletRuntime.hasProvider || !activeWalletProvider || !connectedAddress) {
+    const provider = resolveActiveWalletOption()?.provider
+    if (!provider || !connectedAddress) {
       setAggregatorStatus(
         'No injected wallet provider is available for the aggregator transaction.',
       )
@@ -1095,7 +1251,7 @@ function PufferPilotWorkspace() {
           gas: aggregatorQuote.transaction.gas,
           gasPrice: aggregatorQuote.transaction.gasPrice,
         },
-        activeWalletProvider,
+        provider,
       )
       setTxHash(hash)
       setAggregatorStatus(`Wallet accepted 0x pufETH transaction ${shortenAddress(hash)}.`)
@@ -1137,10 +1293,13 @@ function PufferPilotWorkspace() {
 
           <div className="flex flex-wrap items-center gap-2">
             <ThemeToggle />
-            <Badge variant={plannerContext.snapshot.mode === 'live' ? 'success' : 'neutral'}>
+            <Badge
+              variant={plannerContext.snapshot.mode === 'live' ? 'success' : 'neutral'}
+              className="hidden sm:inline-flex"
+            >
               {isLoading ? 'Refreshing' : modeBadge}
             </Badge>
-            <Badge variant={aiEnabled ? 'primary' : 'neutral'}>
+            <Badge variant={aiEnabled ? 'primary' : 'neutral'} className="hidden md:inline-flex">
               {aiEnabled ? 'Optional AI on' : 'No LLM by default'}
             </Badge>
             <Badge variant={appMode === 'real' ? 'warning' : 'success'}>
@@ -1149,7 +1308,10 @@ function PufferPilotWorkspace() {
             <Badge variant={activeNetwork.isTestnet ? 'success' : 'neutral'}>
               {activeNetwork.label}
             </Badge>
-            <Badge variant={walletRuntime.isImToken ? 'success' : 'neutral'}>
+            <Badge
+              variant={walletRuntime.isImToken ? 'success' : 'neutral'}
+              className="hidden md:inline-flex"
+            >
               {appMode === 'demo'
                 ? 'Funded demo wallet'
                 : walletRuntime.isImToken
@@ -1165,6 +1327,10 @@ function PufferPilotWorkspace() {
             <Button size="sm" variant="outline" onClick={refreshData}>
               <RefreshCw className="size-4" />
               Refresh
+            </Button>
+            <Button size="sm" onClick={connectWalletForTestnet} disabled={isWalletBusy}>
+              <Wallet className="size-4" />
+              Connect Wallet
             </Button>
           </div>
         </header>
@@ -1184,6 +1350,13 @@ function PufferPilotWorkspace() {
                   : 'Loading public metrics'
               }
               icon={<DatabaseZap className="size-4" />}
+              action={
+                <Switch
+                  aria-label="Auto refresh live Puffer data"
+                  checked={autoRefreshLiveData}
+                  onCheckedChange={setAutoRefreshLiveData}
+                />
+              }
             >
               <MetricRow
                 label="pufETH per ETH"
@@ -1266,69 +1439,86 @@ function PufferPilotWorkspace() {
 
           <div
             className={cn(
-              'grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,1.05fr)_minmax(0,0.95fr)]',
+              'grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,1.85fr)_minmax(0,0.45fr)]',
               activeMobileTab === 'chat' || activeMobileTab === 'plan' ? '' : '!hidden lg:!grid',
             )}
           >
             <Panel
-              title="Intent Chat"
-              subtitle="Describe the action; private material is blocked"
-              icon={<MessageSquareText className="size-4" />}
+              title="Stake / Exchange"
+              subtitle="Puffer-style deposit console with deterministic intent guardrails"
+              icon={<Repeat2 className="size-4" />}
               className={mobilePanelClass('chat')}
             >
-              <div className="flex h-full min-h-[300px] flex-col gap-3">
-                <div className="rounded-md border border-border bg-surface-cool px-3 py-3">
-                  <div className="text-caption font-semibold text-muted-foreground">
-                    User intent
+              <div className="flex h-full min-h-[520px] flex-col gap-3">
+                <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[210px_minmax(0,1fr)]">
+                  <div className="min-h-0 rounded-xl border border-border bg-surface-blue p-2">
+                    <div className="px-2 py-1 text-caption font-semibold text-primary">
+                      Exchange assets
+                    </div>
+                    <div className="mt-2 grid max-h-[190px] gap-2 overflow-auto pr-1 sm:max-h-[360px]">
+                      {ZERO_EX_SELL_TOKEN_PRESETS.map((token) => (
+                        <button
+                          key={token.symbol}
+                          type="button"
+                          onClick={() => {
+                            setAggregatorSellToken(token)
+                            setAggregatorCustomToken('')
+                            setAggregatorQuote(null)
+                          }}
+                          className={cn(
+                            'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
+                            aggregatorSellToken.symbol === token.symbol
+                              ? 'border-primary bg-background text-primary shadow-[var(--shadow-card)]'
+                              : 'border-transparent bg-background/70 text-foreground hover:border-border hover:bg-background',
+                          )}
+                        >
+                          <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-caption font-bold text-primary">
+                            {token.symbol.slice(0, 2)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-caption font-semibold">
+                              {token.symbol}
+                            </span>
+                            <span className="block truncate text-[11px] text-muted-foreground">
+                              {token.name}
+                            </span>
+                          </span>
+                          <Badge variant="neutral">{token.category}</Badge>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <p className="mt-2 text-body-sm leading-6">{effectiveIntent.sanitizedText}</p>
-                </div>
 
-                {safetyDecision.redactions.length ? (
-                  <Alert variant="destructive" className="border-danger-border bg-error-surface">
-                    <ShieldX className="size-4" />
-                    <AlertTitle>Secret material redacted</AlertTitle>
-                    <AlertDescription>
-                      Seed phrases, private keys, keystore JSON, and wallet passwords stay out of
-                      the plan. This request is blocked before any wallet action.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <MetricRow label="Asset" value={effectiveIntent.asset} />
-                  <MetricRow
-                    label="Amount"
-                    value={
-                      effectiveIntent.amount
-                        ? `${formatNumber(effectiveIntent.amount, 4)} ${stakeAsset}`
-                        : 'Read-only'
-                    }
-                  />
-                  <MetricRow label="Risk" value={effectiveIntent.riskTolerance} />
-                  <MetricRow label="Goal" value={effectiveIntent.goal.replaceAll('_', ' ')} />
-                  <MetricRow label="Chain" value={activeNetwork.label} />
-                  <MetricRow
-                    label="Mode"
-                    value={effectiveIntent.executionMode.replaceAll('_', ' ')}
-                  />
-                  <MetricRow label="SDK" value={activeNetwork.sdkChain} />
-                </div>
-
-                <div className="mt-auto space-y-2 border-t border-border pt-3">
-                  <div className="grid gap-2 rounded-md bg-card px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-caption font-semibold">Execution mode</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          Demo is fully local; Real Wallet Mode connects imToken or another wallet
-                        </div>
+                  <div className="flex min-h-0 flex-col gap-3 rounded-xl border border-border bg-background p-3 shadow-[var(--shadow-card)]">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="grid grid-cols-3 gap-1 rounded-full bg-secondary p-1 text-caption font-semibold">
+                        <button
+                          type="button"
+                          className="rounded-full bg-primary px-3 py-1.5 text-primary-foreground"
+                        >
+                          Stake
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full px-3 py-1.5 text-muted-foreground hover:bg-background"
+                          onClick={() => requestDemoAggregatorQuote()}
+                        >
+                          Exchange
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full px-3 py-1.5 text-muted-foreground hover:bg-background"
+                          onClick={() => setActiveMobileTab('vault')}
+                        >
+                          Vaults
+                        </button>
                       </div>
                       <Badge variant={appMode === 'demo' ? 'success' : 'warning'}>
-                        {appMode === 'demo' ? 'Demo Mode' : 'Real Wallet Mode'}
+                        {appMode === 'demo' ? 'Simulation funded' : 'Wallet gated'}
                       </Badge>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+
+                    <div className="grid grid-cols-4 gap-2">
                       <Button
                         variant={appMode === 'demo' ? 'default' : 'outline'}
                         size="sm"
@@ -1342,7 +1532,7 @@ function PufferPilotWorkspace() {
                           )
                         }}
                       >
-                        Demo Mode
+                        Demo
                       </Button>
                       <Button
                         variant={appMode === 'real' ? 'default' : 'outline'}
@@ -1357,25 +1547,8 @@ function PufferPilotWorkspace() {
                           )
                         }}
                       >
-                        Real Wallet Mode
+                        Real
                       </Button>
-                    </div>
-                  </div>
-                  <div className="grid gap-2 rounded-md bg-card px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-caption font-semibold">Network</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          Holesky is safest for demos; mainnet requires MAINNET confirmation
-                        </div>
-                      </div>
-                      <Switch
-                        aria-label="Auto refresh live Puffer data"
-                        checked={autoRefreshLiveData}
-                        onCheckedChange={setAutoRefreshLiveData}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
                       <Button
                         variant={selectedNetworkId === 'holesky' ? 'secondary' : 'outline'}
                         size="sm"
@@ -1397,17 +1570,122 @@ function PufferPilotWorkspace() {
                         Mainnet
                       </Button>
                     </div>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <Input
-                      value={prompt}
-                      onChange={(event) => setPrompt(event.target.value)}
-                      aria-label="PufferPilot intent"
-                    />
-                    <Button onClick={submitPrompt}>
-                      Plan
-                      <ArrowRight className="size-4" />
-                    </Button>
+
+                    <div className="grid gap-3">
+                      <div className="rounded-xl border border-info-border bg-background px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-caption font-semibold text-muted-foreground">
+                            You'll deposit
+                          </span>
+                          <Badge variant="primary">{aggregatorSellToken.symbol}</Badge>
+                        </div>
+                        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                          <Input
+                            value={exchangeAmountInput}
+                            onChange={(event) => {
+                              setExchangeAmountInput(event.target.value)
+                              setAggregatorQuote(null)
+                            }}
+                            aria-label="Primary exchange amount"
+                            inputMode="decimal"
+                            placeholder="0.3"
+                            className="h-14 border-0 bg-transparent px-0 text-[32px] font-bold shadow-none focus-visible:ring-0"
+                          />
+                          <div className="rounded-full border border-border bg-card px-4 py-2 text-body-sm font-semibold">
+                            {aggregatorSellToken.symbol}
+                          </div>
+                        </div>
+                        {appMode === 'demo' ? (
+                          <div className="mt-2 text-[11px] text-muted-foreground">
+                            Demo available:{' '}
+                            {formatNumber(
+                              demoBalances[
+                                demoBalanceAssetForSymbol(aggregatorSellToken.symbol) ?? 'ETH'
+                              ] ?? 0,
+                              aggregatorSellToken.decimals === 6 ? 2 : 6,
+                            )}{' '}
+                            {aggregatorSellToken.symbol}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-[11px] text-muted-foreground">
+                            Real wallet balances are read after imToken, MetaMask, or another
+                            injected wallet connects.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-center">
+                        <div className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-cta-sm)]">
+                          <ArrowRight className="size-4 rotate-90" />
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-success-border bg-success-surface px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-caption font-semibold text-success-text">
+                            You'll receive
+                          </span>
+                          <Badge variant="success">pufETH</Badge>
+                        </div>
+                        <div className="mt-3 text-[32px] font-bold leading-none text-success-text">
+                          {aggregatorQuote
+                            ? formatBaseUnits(aggregatorQuote.buyAmountWei, 18, 6)
+                            : aggregatorSellToken.symbol === stakeAsset
+                              ? formatNumber(preview.outputPufEth, 6)
+                              : 'Quote'}
+                        </div>
+                        <div className="mt-2 text-caption text-success-text">
+                          Rate: 1 ETH = {formatNumber(plannerContext.snapshot.rate.pufEthPerEth, 6)}{' '}
+                          pufETH
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 rounded-lg border border-border bg-card px-3 py-2 text-caption text-muted-foreground sm:grid-cols-3">
+                      <span>
+                        TVL {formatUsd(plannerContext.snapshot.protocol.tvlPufferStaking)}
+                      </span>
+                      <span>APY {formatPercent(plannerContext.snapshot.protocol.stakingApy)}</span>
+                      <span>
+                        Vaults{' '}
+                        {topVaults.length
+                          ? `${formatPercent(topVaults[0]?.apy ?? 0)} top`
+                          : 'Loading'}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={requestDemoAggregatorQuote}
+                        disabled={appMode !== 'demo' && isAggregatorBusy}
+                      >
+                        Demo quote
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={
+                          appMode === 'demo'
+                            ? requestAggregatorTransaction
+                            : requestRealAggregatorQuote
+                        }
+                        disabled={isAggregatorBusy}
+                      >
+                        {appMode === 'demo' ? 'Run demo swap' : 'Real 0x quote'}
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={
+                          appMode === 'demo' ? requestHoleskyDeposit : connectWalletForTestnet
+                        }
+                        disabled={isWalletBusy}
+                      >
+                        {appMode === 'demo' ? `Demo ${stakeAsset} stake` : 'Connect wallet'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1420,6 +1698,42 @@ function PufferPilotWorkspace() {
               className={mobilePanelClass('plan')}
             >
               <div className="space-y-3">
+                <div className="grid gap-2 rounded-md border border-border bg-card px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-caption font-semibold text-muted-foreground">
+                        Intent guardrail
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-body-sm leading-6">
+                        {effectiveIntent.sanitizedText}
+                      </p>
+                    </div>
+                    <Badge variant={appMode === 'demo' ? 'success' : 'warning'}>
+                      {appMode === 'demo' ? 'Demo' : 'Real'}
+                    </Badge>
+                  </div>
+                  {safetyDecision.redactions.length ? (
+                    <Alert variant="destructive" className="border-danger-border bg-error-surface">
+                      <ShieldX className="size-4" />
+                      <AlertTitle>Secret material redacted</AlertTitle>
+                      <AlertDescription>
+                        Seed phrases, private keys, keystore JSON, and wallet passwords stay out of
+                        the plan. This request is blocked before any wallet action.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <Input
+                      value={prompt}
+                      onChange={(event) => setPrompt(event.target.value)}
+                      aria-label="PufferPilot intent"
+                    />
+                    <Button onClick={submitPrompt}>
+                      Plan
+                      <ArrowRight className="size-4" />
+                    </Button>
+                  </div>
+                </div>
                 {rankedPlans.map((plan, index) => (
                   <div
                     key={plan.candidate.id}

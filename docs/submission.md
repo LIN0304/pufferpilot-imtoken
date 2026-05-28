@@ -16,8 +16,8 @@ opportunities, and learns user preferences locally through an on-device contextu
 
 ## Base Challenge Coverage
 
-- Connect wallet: EIP-1193/EIP-6963 provider detection, provider selector, and explicit
-  `eth_requestAccounts`.
+- Connect wallet: EIP-1193/EIP-6963 provider detection, provider selector, header connect CTA, and
+  explicit `eth_requestAccounts` on the selected injected provider.
 - Stake ETH/stETH/wstETH to mint pufETH: official Puffer SDK `PufferVault.depositETH`,
   `PufferDepositor.depositStETH`, and `PufferDepositor.depositWstETH`.
 - Display pufETH balance/rate: SDK balance read plus live Puffer public API rate.
@@ -27,9 +27,11 @@ opportunities, and learns user preferences locally through an on-device contextu
 
 ## Advanced Coverage
 
-The Exchange panel supports local demo balance updates plus a user-supplied 0x API key for mainnet
-any-token-to-pufETH quote and transaction preview. It blocks transaction send when exact allowance is
-missing and requires `MAINNET` before the wallet can be asked to send the aggregator transaction.
+The central Exchange console supports local demo balance updates plus a user-supplied 0x API key for
+mainnet any-token-to-pufETH quote and transaction preview. Presets cover ETH/WETH/stETH/wstETH,
+common ETH LST/LRT assets, stablecoins, and WBTC, with a custom token address escape hatch. It blocks
+transaction send when exact allowance is missing and requires `MAINNET` before the wallet can be
+asked to send the aggregator transaction.
 
 ## Safety Statement
 

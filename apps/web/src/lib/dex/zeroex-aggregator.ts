@@ -151,7 +151,17 @@ export function getDemoAggregatorQuote(
     WETH: 997_000n,
     stETH: 997_000n,
     wstETH: 1_160_000n,
+    rETH: 1_090_000n,
+    cbETH: 1_055_000n,
+    swETH: 1_020_000n,
+    osETH: 1_015_000n,
+    weETH: 1_070_000n,
+    ezETH: 1_050_000n,
+    sfrxETH: 1_120_000n,
     USDC: 262n,
+    USDT: 262n,
+    DAI: 262n,
+    WBTC: 26_200_000n,
   }
   const rate = demoRateBySymbol[options.sellTokenSymbol ?? ''] ?? 940_000n
   const demoBuyAmount = (normalizedSellAmount * rate) / 1_000_000n
