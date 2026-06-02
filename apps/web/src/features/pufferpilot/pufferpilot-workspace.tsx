@@ -657,6 +657,7 @@ function PufferPilotWorkspace() {
   const selectedAggregatorSellTokenAddress =
     aggregatorCustomToken.trim() || aggregatorSellToken.address
   const exchangeAmount = parsePositiveAmount(exchangeAmountInput)
+  const exchangePreviewPufEth = exchangeAmount * plannerContext.snapshot.rate.pufEthPerEth
   const mobileGridClass = (tab: MobileTab) => (activeMobileTab === tab ? '' : '!hidden lg:!grid')
   const mobilePanelClass = (tab: MobileTab) => (activeMobileTab === tab ? '' : '!hidden lg:!flex')
 
@@ -1492,26 +1493,31 @@ function PufferPilotWorkspace() {
                   <div className="flex min-h-0 flex-col gap-3 rounded-xl border border-border bg-background p-3 shadow-[var(--shadow-card)]">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="grid grid-cols-3 gap-1 rounded-full bg-secondary p-1 text-caption font-semibold">
-                        <button
-                          type="button"
-                          className="rounded-full bg-primary px-3 py-1.5 text-primary-foreground"
-                        >
-                          Stake
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-full px-3 py-1.5 text-muted-foreground hover:bg-background"
-                          onClick={() => requestDemoAggregatorQuote()}
-                        >
-                          Exchange
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-full px-3 py-1.5 text-muted-foreground hover:bg-background"
-                          onClick={() => setActiveMobileTab('vault')}
-                        >
-                          Vaults
-                        </button>
+                        {(
+                          [
+                            { label: 'Stake', tab: 'chat' },
+                            { label: 'Exchange', tab: 'dex' },
+                            { label: 'Vaults', tab: 'vault' },
+                          ] as const
+                        ).map((segment) => {
+                          const isActive = activeMobileTab === segment.tab
+                          return (
+                            <button
+                              key={segment.tab}
+                              type="button"
+                              aria-pressed={isActive}
+                              className={cn(
+                                'rounded-full px-3 py-1.5 transition-colors',
+                                isActive
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-muted-foreground hover:bg-background',
+                              )}
+                              onClick={() => setActiveMobileTab(segment.tab)}
+                            >
+                              {segment.label}
+                            </button>
+                          )
+                        })}
                       </div>
                       <Badge variant={appMode === 'demo' ? 'success' : 'warning'}>
                         {appMode === 'demo' ? 'Simulation funded' : 'Wallet gated'}
@@ -1628,11 +1634,15 @@ function PufferPilotWorkspace() {
                           <Badge variant="success">pufETH</Badge>
                         </div>
                         <div className="mt-3 text-[32px] font-bold leading-none text-success-text">
-                          {aggregatorQuote
-                            ? formatBaseUnits(aggregatorQuote.buyAmountWei, 18, 6)
-                            : aggregatorSellToken.symbol === stakeAsset
-                              ? formatNumber(preview.outputPufEth, 6)
-                              : 'Quote'}
+                          {aggregatorQuote ? (
+                            formatBaseUnits(aggregatorQuote.buyAmountWei, 18, 6)
+                          ) : aggregatorSellToken.symbol === stakeAsset ? (
+                            formatNumber(exchangePreviewPufEth, 6)
+                          ) : (
+                            <span className="text-body-md font-semibold text-success-text/70">
+                              Request a quote
+                            </span>
+                          )}
                         </div>
                         <div className="mt-2 text-caption text-success-text">
                           Rate: 1 ETH = {formatNumber(plannerContext.snapshot.rate.pufEthPerEth, 6)}{' '}
