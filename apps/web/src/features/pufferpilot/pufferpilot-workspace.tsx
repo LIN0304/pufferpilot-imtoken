@@ -342,6 +342,13 @@ function getNetworkConfirmWord(isTestnet: boolean) {
   return isTestnet ? 'HOLESKY' : 'MAINNET'
 }
 
+function isLikelyMobileDevice() {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
+}
+
 function makeDemoTxHash(seed: string): `0x${string}` {
   const encoded = Array.from(seed)
     .map((char) => char.charCodeAt(0).toString(16).padStart(2, '0'))
@@ -855,6 +862,69 @@ function PufferPilotWorkspace() {
     }
   }
 
+  // Global "Connect Wallet" action. Unlike connectWalletForTestnet, this always
+  // tries to surface a real injected wallet prompt — even from Demo Mode — so a
+  // tap on Connect Wallet anywhere pops the wallet. The injected provider is
+  // resolved synchronously so eth_requestAccounts fires inside the click gesture,
+  // which mobile in-app wallet browsers (imToken, MetaMask) require to show the
+  // connection prompt.
+  const connectInjectedWallet = async () => {
+    const option = resolveActiveWalletOption()
+    const provider = option?.provider
+
+    if (!provider) {
+      if (isLikelyMobileDevice()) {
+        setTestnetStatus(
+          'No in-page wallet detected. Opening the imToken DApp Browser so the wallet can connect…',
+        )
+        if (typeof window !== 'undefined') {
+          window.open(imTokenDappLink, '_blank', 'noopener,noreferrer')
+        }
+      } else {
+        setTestnetStatus(
+          'No injected wallet detected. Install imToken or MetaMask, or open this page inside a wallet DApp browser, then press Connect Wallet again.',
+        )
+      }
+
+      const providers = await discoverInjectedWalletProviders()
+      if (providers.length) {
+        setWalletProviders(providers)
+        setSelectedWalletProviderId((current) =>
+          providers.some((item) => item.id === current) ? current : preferredProviderId(providers),
+        )
+        setWalletRuntime(detectWalletRuntime(providers[0]?.provider))
+      }
+      return
+    }
+
+    if (appMode !== 'real') {
+      setAppMode('real')
+      setExecutionConfirmText('')
+      setPermitConfirmText('')
+      setTxHash(null)
+    }
+    if (option?.id && selectedWalletProviderId !== option.id) {
+      setSelectedWalletProviderId(option.id)
+    }
+    setWalletRuntime(detectWalletRuntime(provider))
+
+    try {
+      setIsWalletBusy(true)
+      const accounts = await requestWalletAccounts(provider)
+      setWalletAccounts(accounts)
+      await refreshWalletSnapshot(accounts, provider)
+      setTestnetStatus(
+        accounts[0]
+          ? `Connected ${shortenAddress(accounts[0])} through ${option?.label ?? 'injected wallet'}. Wallet prompts stay gated by ${networkConfirmWord} confirmation.`
+          : 'Wallet returned no account.',
+      )
+    } catch (error) {
+      setTestnetStatus(error instanceof Error ? error.message : 'Wallet connection was cancelled.')
+    } finally {
+      setIsWalletBusy(false)
+    }
+  }
+
   const switchToHolesky = async () => {
     if (appMode === 'demo') {
       setSelectedNetworkId('holesky')
@@ -1329,7 +1399,7 @@ function PufferPilotWorkspace() {
               <RefreshCw className="size-4" />
               Refresh
             </Button>
-            <Button size="sm" onClick={connectWalletForTestnet} disabled={isWalletBusy}>
+            <Button size="sm" onClick={connectInjectedWallet} disabled={isWalletBusy}>
               <Wallet className="size-4" />
               Connect Wallet
             </Button>
@@ -1688,9 +1758,7 @@ function PufferPilotWorkspace() {
                       <Button
                         variant="default"
                         size="sm"
-                        onClick={
-                          appMode === 'demo' ? requestHoleskyDeposit : connectWalletForTestnet
-                        }
+                        onClick={appMode === 'demo' ? requestHoleskyDeposit : connectInjectedWallet}
                         disabled={isWalletBusy}
                       >
                         {appMode === 'demo' ? `Demo ${stakeAsset} stake` : 'Connect wallet'}
@@ -1978,7 +2046,7 @@ function PufferPilotWorkspace() {
                     </div>
                   )}
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" onClick={connectWalletForTestnet}>
+                    <Button variant="outline" size="sm" onClick={connectInjectedWallet}>
                       <Wallet className="size-4" />
                       Connect selected
                     </Button>
